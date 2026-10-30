@@ -11,7 +11,7 @@ class PhoWhisperAdapter:
         self.processor = None
         self.device = None
         self.language = "vi"
-        self.max_new_tokens = 448
+        self.max_new_tokens = 440
         self.do_sample = False
         self.num_beams = 1
 
@@ -21,13 +21,13 @@ class PhoWhisperAdapter:
 
         self.device = runtime_config.get("device", "cuda:0")
         self.language = model_config.get("language", "vi")
-        self.max_new_tokens = model_config.get("max_new_tokens", 448)
+        self.max_new_tokens = model_config.get("max_new_tokens", 440)
         self.do_sample = runtime_config.get("do_sample", False)
         self.num_beams = runtime_config.get("num_beams", 1)
         self.processor = AutoProcessor.from_pretrained(model_path, local_files_only=True)
         self.model = AutoModelForSpeechSeq2Seq.from_pretrained(
             model_path,
-            torch_dtype=torch.float16 if runtime_config.get("dtype") == "float16" else torch.float32,
+            dtype=torch.float16 if runtime_config.get("dtype") == "float16" else torch.float32,
             low_cpu_mem_usage=True,
             local_files_only=True,
         ).to(self.device)

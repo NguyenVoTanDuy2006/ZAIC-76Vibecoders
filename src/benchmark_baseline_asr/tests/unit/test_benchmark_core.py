@@ -69,6 +69,14 @@ class BenchmarkCoreTests(unittest.TestCase):
         self.assertEqual(len(config["models"]), 4)
         self.assertEqual(config["_loaded"]["execution"]["gpu_ids"], [0, 1])
 
+    def test_phowhisper_generation_budget_includes_decoder_prompt(self):
+        config_root = Path("src/benchmark_baseline_asr/configs/models")
+        self.assertLess(4 + PhoWhisperAdapter().max_new_tokens, 448)
+        for model_name in ("phowhisper_medium", "phowhisper_large"):
+            with self.subTest(model=model_name):
+                model_config = json.loads((config_root / f"{model_name}.json").read_text(encoding="utf-8"))
+                self.assertLess(4 + model_config["max_new_tokens"], 448)
+
     def test_resume_fingerprint_covers_audio_preprocessing_settings(self):
         with tempfile.TemporaryDirectory() as temp:
             manifest = Path(temp) / "manifest.jsonl"
@@ -110,6 +118,41 @@ class BenchmarkCoreTests(unittest.TestCase):
         self.assertEqual(result.text, "recognized text")
         self.assertEqual(adapter.model.kwargs["max_new_tokens"], 77)
         self.assertFalse(adapter.model.kwargs["do_sample"])
+
+    def test_phowhisper_load_uses_transformers_dtype_argument(self):
+        captured = {}
+
+        class Processor:
+            @staticmethod
+            def from_pretrained(model_path, local_files_only):
+                return object()
+
+        class Model:
+            def to(self, device):
+                return self
+
+            def eval(self):
+                pass
+
+        class ModelLoader:
+            @staticmethod
+            def from_pretrained(model_path, **kwargs):
+                captured.update(kwargs)
+                return Model()
+
+        torch = types.ModuleType("torch")
+        torch.float16 = object()
+        torch.float32 = object()
+        transformers = types.ModuleType("transformers")
+        transformers.AutoModelForSpeechSeq2Seq = ModelLoader
+        transformers.AutoProcessor = Processor
+
+        adapter = PhoWhisperAdapter()
+        with mock.patch.dict(sys.modules, {"torch": torch, "transformers": transformers}):
+            adapter.load("model-path", {"language": "vi"}, {"device": "cpu", "dtype": "float16"})
+
+        self.assertIs(captured["dtype"], torch.float16)
+        self.assertNotIn("torch_dtype", captured)
 
     def test_resume_disabled_refuses_existing_checkpoint(self):
         with tempfile.TemporaryDirectory() as temp:
