@@ -31,6 +31,10 @@ class PhoWhisperAdapter:
             low_cpu_mem_usage=True,
             local_files_only=True,
         ).to(self.device)
+        # Whisper's checkpoint generation config pins max_length=448. Keeping it
+        # alongside max_new_tokens makes Transformers report a conflicting limit;
+        # Whisper computes the final max_length from the decoder prompt + token budget.
+        self.model.generation_config.max_length = None
         self.model.eval()
 
     def transcribe(self, audio: AudioInput) -> Transcription:

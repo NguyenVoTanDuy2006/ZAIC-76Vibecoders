@@ -175,6 +175,8 @@ class BenchmarkCoreTests(unittest.TestCase):
                 return object()
 
         class Model:
+            generation_config = types.SimpleNamespace(max_length=448)
+
             def to(self, device):
                 return self
 
@@ -200,6 +202,41 @@ class BenchmarkCoreTests(unittest.TestCase):
 
         self.assertIs(captured["dtype"], torch.float16)
         self.assertNotIn("torch_dtype", captured)
+
+    def test_phowhisper_load_clears_checkpoint_max_length_when_using_max_new_tokens(self):
+        class Processor:
+            @staticmethod
+            def from_pretrained(model_path, local_files_only):
+                return object()
+
+        class Model:
+            def __init__(self):
+                self.generation_config = types.SimpleNamespace(max_length=448)
+
+            def to(self, device):
+                return self
+
+            def eval(self):
+                pass
+
+        class ModelLoader:
+            @staticmethod
+            def from_pretrained(model_path, **kwargs):
+                return model
+
+        model = Model()
+        torch = types.ModuleType("torch")
+        torch.float16 = object()
+        torch.float32 = object()
+        transformers = types.ModuleType("transformers")
+        transformers.AutoModelForSpeechSeq2Seq = ModelLoader
+        transformers.AutoProcessor = Processor
+
+        adapter = PhoWhisperAdapter()
+        with mock.patch.dict(sys.modules, {"torch": torch, "transformers": transformers}):
+            adapter.load("model-path", {"language": "vi", "max_new_tokens": 440}, {"device": "cpu"})
+
+        self.assertIsNone(adapter.model.generation_config.max_length)
 
     def test_resume_disabled_refuses_existing_checkpoint(self):
         with tempfile.TemporaryDirectory() as temp:

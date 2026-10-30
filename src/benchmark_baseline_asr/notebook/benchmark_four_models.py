@@ -267,7 +267,34 @@ def print_comparison(rows: list[dict[str, Any]]) -> None:
 
 
 # %% [markdown]
-# ## 6. Run the benchmark workflows
+# ## 6. Smoke test all four models
+#
+# After preparing the manifest and downloading model snapshots, run the same
+# median-duration audio sample through every model on GPU 0. Models run one at a
+# time and are unloaded after each check, so this verifies loading and inference
+# without starting the full 1,600-sample benchmark if a model is unavailable.
+
+# %%
+def run_model_smoke_test(config_path: Path, samples: list[Any], resolved_models: dict[str, dict]) -> list[dict]:
+    from benchmark_baseline_asr.application.config_service import resolve_experiment
+    from benchmark_baseline_asr.workflow.smoke_test import smoke_test_models
+
+    config = resolve_experiment(config_path, ENVIRONMENT)
+    results = smoke_test_models(
+        samples,
+        config["models"],
+        resolved_models,
+        config["_loaded"]["audio"],
+        config["_loaded"]["runtime"],
+    )
+    print("\nSmoke-test results (one sample per model):")
+    for row in results:
+        print(f"- {row['model']}: {row['latency_seconds']:.2f}s — {row['text'][:240]}")
+    return results
+
+
+# %% [markdown]
+# ## 7. Run the benchmark workflows
 
 # %%
 def run_benchmark_notebook() -> Path:
@@ -287,24 +314,27 @@ def run_benchmark_notebook() -> Path:
         print(f"GPUs: {', '.join(devices)}")
         print(f"Run ID: {RUN_ID}")
 
-        print("\n[1/5] Preparing manifest and two duration-balanced shards...")
+        print("\n[1/6] Preparing manifest and two duration-balanced shards...")
         run_dir, samples, shards = prepare(str(config_path), ENVIRONMENT, RUN_ID)
         print(f"Prepared {len(samples)} samples across {len(shards)} shards.")
 
-        print("\n[2/5] Checking Kaggle HF_TOKEN and downloading model snapshots...")
+        print("\n[2/6] Checking Kaggle HF_TOKEN and downloading model snapshots...")
         token = get_huggingface_token("HF_TOKEN")
         try:
-            download(str(config_path), ENVIRONMENT, RUN_ID, token=token)
+            _, resolved_models = download(str(config_path), ENVIRONMENT, RUN_ID, token=token)
         finally:
             del token
 
-        print("\n[3/5] Transcribing with all four models on the two GPUs...")
+        print("\n[3/6] Smoke-testing all four models on one representative sample...")
+        run_model_smoke_test(config_path, samples, resolved_models)
+
+        print("\n[4/6] Transcribing the full train split with all four models on the two GPUs...")
         transcribe(str(config_path), ENVIRONMENT, RUN_ID)
 
-        print("\n[4/5] Calculating raw and normalized CER/WER...")
+        print("\n[5/6] Calculating raw and normalized CER/WER...")
         evaluate(str(config_path), RUN_ID, ENVIRONMENT)
 
-        print("\n[5/5] Comparing model metrics and writing reports...")
+        print("\n[6/6] Comparing model metrics and writing reports...")
         rows = compare(str(config_path), RUN_ID, ENVIRONMENT)
         print_comparison(rows)
         print(f"\nRun artifacts: {run_dir}")
