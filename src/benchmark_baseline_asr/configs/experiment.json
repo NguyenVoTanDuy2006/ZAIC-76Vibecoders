@@ -1,0 +1,20 @@
+{
+  "run_name": "asr_train_baseline",
+  "models": [
+    {"key": "phowhisper_medium", "config": "models/phowhisper_medium.json"},
+    {"key": "phowhisper_large", "config": "models/phowhisper_large.json"},
+    {"key": "qwen3_asr_0_6b", "config": "models/qwen3_asr_0_6b.json"},
+    {"key": "qwen3_asr_1_7b", "config": "models/qwen3_asr_1_7b.json"}
+  ],
+  "configs": {
+    "dataset": "dataset.json",
+    "audio": "audio.json",
+    "download": "download.json",
+    "secrets": "secrets.json",
+    "runtime": "runtime.json",
+    "execution": "execution.json",
+    "normalization": "normalization.json",
+    "metrics": "metrics.json",
+    "reporting": "reporting.json"
+  }
+}

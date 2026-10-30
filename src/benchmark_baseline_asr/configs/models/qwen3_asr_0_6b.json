@@ -1,0 +1,7 @@
+{
+  "repo_id": "Qwen/Qwen3-ASR-0.6B",
+  "revision": null,
+  "adapter": "qwen_asr",
+  "language": "Vietnamese",
+  "max_new_tokens": 448
+}

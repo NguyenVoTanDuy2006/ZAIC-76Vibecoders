@@ -1,0 +1,5 @@
+{
+  "output_dir": "artifacts/asr_benchmark/runs",
+  "formats": ["json", "csv", "markdown"],
+  "latency_percentiles": [50, 95]
+}

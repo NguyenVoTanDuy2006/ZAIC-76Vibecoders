@@ -1,0 +1,11 @@
+{
+  "device": "cuda:0",
+  "dtype": "float16",
+  "batch_size": 1,
+  "seed": 1234,
+  "cpu_threads_per_worker": 2,
+  "do_sample": false,
+  "num_beams": 1,
+  "language": "Vietnamese",
+  "warmup_samples_per_worker": 1
+}

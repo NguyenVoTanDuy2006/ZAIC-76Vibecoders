@@ -1,0 +1,18 @@
+{
+  "secrets": {
+    "provider": "environment",
+    "token_label": "HF_TOKEN"
+  },
+  "dataset": {
+    "root": "data/train+public_test/train"
+  },
+  "download": {
+    "models_dir": "artifacts/asr_benchmark/models"
+  },
+  "reporting": {
+    "output_dir": "artifacts/asr_benchmark/runs"
+  },
+  "execution": {
+    "gpu_ids": [0, 1]
+  }
+}

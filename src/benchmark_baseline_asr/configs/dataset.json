@@ -1,0 +1,6 @@
+{
+  "root": "data/train+public_test/train",
+  "jsonl": "train.jsonl",
+  "audio_root": ".",
+  "limit": null
+}

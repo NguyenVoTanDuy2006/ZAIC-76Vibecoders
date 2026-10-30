@@ -1,0 +1,8 @@
+{
+  "character_error_rate": true,
+  "word_error_rate": true,
+  "evaluate_raw": true,
+  "evaluate_normalized": true,
+  "wer_tokenization": "whitespace",
+  "cer_includes_whitespace": true
+}

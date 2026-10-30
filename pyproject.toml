@@ -1,0 +1,32 @@
+[project]
+name = "zalo-ai-challenge"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Nguyen Vo Tan Duy", email = "nguyenvotanduy2006@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+asr = [
+    "accelerate>=1.12.0",
+    "huggingface-hub>=0.34.0",
+    "librosa>=0.11.0",
+    "numpy>=2.0.0",
+    "qwen-asr==0.0.6",
+    "soundfile>=0.13.0",
+    "transformers==4.57.6",
+]
+
+[project.scripts]
+zalo-ai-challenge = "zalo_ai_challenge:main"
+asr-benchmark = "benchmark_baseline_asr.interfaces.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.8,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = ["zalo_ai_challenge", "benchmark_baseline_asr"]

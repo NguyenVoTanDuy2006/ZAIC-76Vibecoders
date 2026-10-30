@@ -1,0 +1,7 @@
+{
+  "repo_id": "vinai/PhoWhisper-large",
+  "revision": null,
+  "adapter": "phowhisper",
+  "language": "vi",
+  "max_new_tokens": 448
+}

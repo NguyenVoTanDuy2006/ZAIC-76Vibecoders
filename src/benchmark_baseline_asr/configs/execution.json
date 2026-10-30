@@ -1,0 +1,7 @@
+{
+  "gpu_ids": [0, 1],
+  "shard_count": 2,
+  "worker_start_timeout_seconds": 2400,
+  "worker_join_timeout_seconds": 43200,
+  "resume": true
+}

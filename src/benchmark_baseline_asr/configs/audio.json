@@ -1,0 +1,6 @@
+{
+  "sample_rate": 16000,
+  "channels": 1,
+  "sample_width_bytes": 2,
+  "resample_nonmatching_audio": true
+}

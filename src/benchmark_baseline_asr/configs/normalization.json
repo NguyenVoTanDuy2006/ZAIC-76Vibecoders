@@ -1,0 +1,8 @@
+{
+  "unicode_form": "NFC",
+  "lowercase": true,
+  "punctuation_to_space": true,
+  "collapse_whitespace": true,
+  "preserve_vietnamese_diacritics": true,
+  "preserve_number_spelling": true
+}
