@@ -87,6 +87,8 @@ class BenchmarkCoreTests(unittest.TestCase):
             self.assertNotEqual(first["fingerprint"], second["fingerprint"])
 
     def test_phowhisper_transcribe_uses_settings_saved_during_load(self):
+        decode_options = {}
+
         class Tensor:
             def is_floating_point(self):
                 return True
@@ -98,7 +100,8 @@ class BenchmarkCoreTests(unittest.TestCase):
             def __call__(self, waveform, sampling_rate, return_tensors):
                 return {"input_features": Tensor()}
 
-            def batch_decode(self, generated, skip_special_tokens):
+            def batch_decode(self, generated, skip_special_tokens, **kwargs):
+                decode_options.update(kwargs)
                 return [" recognized text "]
 
         class Model:
@@ -123,6 +126,7 @@ class BenchmarkCoreTests(unittest.TestCase):
         self.assertEqual(result.text, "recognized text")
         self.assertEqual(adapter.model.kwargs["max_new_tokens"], 77)
         self.assertFalse(adapter.model.kwargs["do_sample"])
+        self.assertIs(decode_options["clean_up_tokenization_spaces"], False)
 
     def test_phowhisper_transcribe_casts_float_features_to_model_dtype(self):
         model_dtype = object()
@@ -145,7 +149,7 @@ class BenchmarkCoreTests(unittest.TestCase):
             def __call__(self, waveform, sampling_rate, return_tensors):
                 return {"input_features": self.features}
 
-            def batch_decode(self, generated, skip_special_tokens):
+            def batch_decode(self, generated, skip_special_tokens, **kwargs):
                 return ["text"]
 
         class Model:

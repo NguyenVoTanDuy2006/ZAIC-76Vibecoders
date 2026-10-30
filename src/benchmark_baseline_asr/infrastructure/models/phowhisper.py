@@ -55,7 +55,11 @@ class PhoWhisperAdapter:
                 num_beams=self.num_beams,
                 max_new_tokens=self.max_new_tokens,
             )
-        text = self.processor.batch_decode(generated, skip_special_tokens=True)[0].strip()
+        text = self.processor.batch_decode(
+            generated,
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=False,
+        )[0].strip()
         return Transcription(text=text, language="Vietnamese")
 
     def unload(self) -> None:

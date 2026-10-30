@@ -355,20 +355,25 @@ def run_model_smoke_test(config_path: Path, samples: list[Any], resolved_models:
 
 # %%
 def run_benchmark_notebook() -> Path:
-    from benchmark_baseline_asr.infrastructure.secrets.kaggle_secrets import get_huggingface_token
-    from benchmark_baseline_asr.workflow.compare import compare
-    from benchmark_baseline_asr.workflow.download_models import download
-    from benchmark_baseline_asr.workflow.evaluate import evaluate
-    from benchmark_baseline_asr.workflow.prepare_dataset import prepare
-    from benchmark_baseline_asr.workflow.transcribe import transcribe
+    from benchmark_baseline_asr.infrastructure.runtime.dependencies import ensure_asr_runtime
 
     config_path, config_temp_dir = make_runtime_config()
     try:
+        print("Checking ASR runtime dependencies (Transformers 4.57.6, Qwen ASR 0.0.6)...")
+        asr_versions = ensure_asr_runtime()
+        from benchmark_baseline_asr.infrastructure.secrets.kaggle_secrets import get_huggingface_token
+        from benchmark_baseline_asr.workflow.compare import compare
+        from benchmark_baseline_asr.workflow.download_models import download
+        from benchmark_baseline_asr.workflow.evaluate import evaluate
+        from benchmark_baseline_asr.workflow.prepare_dataset import prepare
+        from benchmark_baseline_asr.workflow.transcribe import transcribe
+
         _, dataset_root = load_runtime_settings(config_path)
         devices = check_gpu_runtime()
         print(f"Project root: {PROJECT_ROOT}")
         print(f"Dataset root: {dataset_root}")
         print(f"GPUs: {', '.join(devices)}")
+        print(f"ASR runtime: Transformers {asr_versions['transformers']}, Qwen ASR {asr_versions['qwen-asr']}")
         print(f"Run ID: {RUN_ID}")
 
         print("\n[1/6] Preparing manifest and two duration-balanced shards...")
