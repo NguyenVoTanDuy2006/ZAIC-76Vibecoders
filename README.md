@@ -28,11 +28,13 @@ asr-benchmark benchmark --environment local --run-id example
 
 For Kaggle, select `--environment kaggle` and set the dataset root in `src/benchmark_baseline_asr/configs/environments/kaggle.json` to the mounted folder containing `train.jsonl` and `audio/`. Add a Kaggle Secret labelled `HF_TOKEN` before downloading models. The notebook is intentionally outside this source package.
 
-The standalone `source_manager` package downloads a sparse checkout from GitHub and removes only its marked source directory:
+The `source_manager` utility inside the benchmark package downloads a sparse checkout from GitHub and removes only its marked source directory:
 
 ```bash
-python -m source_manager.cli download --config source_manager/config.json
-python -m source_manager.cli cleanup --config source_manager/config.json
+PYTHONPATH=src python -m benchmark_baseline_asr.source_manager.cli download
+PYTHONPATH=src python -m benchmark_baseline_asr.source_manager.cli cleanup
 ```
 
 The cleanup command is separate from benchmark execution so output can be inspected before removing the downloaded source.
+
+Unit tests for the benchmark and source manager are in `src/benchmark_baseline_asr/tests/` and can be run from the repository root with `PYTHONPATH=src python -m unittest discover -s src/benchmark_baseline_asr/tests/unit`.

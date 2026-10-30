@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from source_manager.cleanup import cleanup_source
-from source_manager.download import download_source
+from benchmark_baseline_asr.source_manager.cleanup import cleanup_source
+from benchmark_baseline_asr.source_manager.download import download_source
 
 
 class SourceManagerTests(unittest.TestCase):

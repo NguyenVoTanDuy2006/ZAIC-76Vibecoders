@@ -21,15 +21,20 @@ Ref mặc định là nhánh hiện tại benchmark_base_asr_model; cho phép đ
 
 ## 2. Tải và xóa source trên Kaggle
 
-Thêm thư mục source_manager/ ở root repo, độc lập với package benchmark. Module này chỉ dùng Python standard library và lệnh Git, để hoạt động trước khi cài dependency ASR.
+Đặt tiện ích source_manager/ và unit tests bên trong package src/benchmark_baseline_asr/ để gom toàn bộ thành phần benchmark vào cùng một thư mục. Source manager chỉ dùng Python standard library và lệnh Git; chạy được trước khi cài dependency ASR với PYTHONPATH=src.
 
-source_manager/
-├── __init__.py
-├── config.json
-├── config.py          # đọc và kiểm tra JSON
-├── download.py        # tải source GitHub
-├── cleanup.py         # xóa source đã tải
-└── cli.py
+src/benchmark_baseline_asr/
+├── source_manager/
+│   ├── __init__.py
+│   ├── config.json
+│   ├── config.py          # đọc và kiểm tra JSON
+│   ├── download.py        # tải source GitHub
+│   ├── cleanup.py         # xóa source đã tải
+│   └── cli.py
+└── tests/
+    └── unit/
+        ├── test_benchmark_core.py
+        └── test_source_manager.py
 
 Các hàm public:
 
@@ -45,8 +50,7 @@ Ví dụ cấu hình:
   "ref": "benchmark_base_asr_model",
   "source_dir": "/kaggle/working/_source/ZAIC-76Vibecoders",
   "include_paths": [
-    "src",
-    "source_manager",
+    "src/benchmark_baseline_asr",
     "pyproject.toml",
     "uv.lock",
     "README.md"
@@ -68,7 +72,7 @@ Hành vi cleanup:
 - Gọi lại sau khi source đã bị xóa vẫn thành công.
 - Không tự chạy khi benchmark hoàn tất; bạn gọi hàm khi đã kiểm tra kết quả, thuận tiện debug nếu có lỗi.
 
-Tiện ích này phải được đưa vào phiên Kaggle trước, ví dụ qua file đính kèm hoặc tải thư mục nhỏ này từ GitHub. Nó không phụ thuộc package benchmark nên dùng được để tải toàn bộ phần source còn lại.
+Tiện ích này phải được đưa vào phiên Kaggle trước, ví dụ qua file đính kèm hoặc tải package source nhỏ này từ GitHub. Nó không cần cài các dependency ASR để tải phần source còn lại.
 
 Package được cài theo cách thông thường, không dùng editable install, để sau khi cleanup source thì package đã cài vẫn có thể import.
 

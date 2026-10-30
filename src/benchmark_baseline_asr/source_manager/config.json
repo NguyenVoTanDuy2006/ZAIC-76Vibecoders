@@ -2,5 +2,5 @@
   "repo_url": "https://github.com/NguyenVoTanDuy2006/ZAIC-76Vibecoders.git",
   "ref": "benchmark_base_asr_model",
   "source_dir": "/kaggle/working/_source/ZAIC-76Vibecoders",
-  "include_paths": ["src", "source_manager", "pyproject.toml", "uv.lock", "README.md"]
+  "include_paths": ["src/benchmark_baseline_asr", "pyproject.toml", "uv.lock", "README.md"]
 }

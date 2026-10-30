@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 from .cleanup import cleanup_source
 from .download import download_source
@@ -9,7 +10,7 @@ from .download import download_source
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="benchmark-source")
     parser.add_argument("action", choices=("download", "cleanup"))
-    parser.add_argument("--config", default="source_manager/config.json")
+    parser.add_argument("--config", default=str(Path(__file__).with_name("config.json")))
     args = parser.parse_args(argv)
     if args.action == "download":
         result = download_source(args.config)
