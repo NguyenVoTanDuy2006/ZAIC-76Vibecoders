@@ -36,7 +36,12 @@ class PhoWhisperAdapter:
     def transcribe(self, audio: AudioInput) -> Transcription:
         import torch
         inputs = self.processor(audio.waveform, sampling_rate=audio.sample_rate, return_tensors="pt")
-        inputs = {key: value.to(self.device) for key, value in inputs.items()}
+        inputs = {
+            key: value.to(self.device, dtype=self.model.dtype)
+            if value.is_floating_point()
+            else value.to(self.device)
+            for key, value in inputs.items()
+        }
         with torch.inference_mode():
             generated = self.model.generate(
                 **inputs,

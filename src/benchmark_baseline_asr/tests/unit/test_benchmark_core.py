@@ -88,7 +88,10 @@ class BenchmarkCoreTests(unittest.TestCase):
 
     def test_phowhisper_transcribe_uses_settings_saved_during_load(self):
         class Tensor:
-            def to(self, device):
+            def is_floating_point(self):
+                return True
+
+            def to(self, device, dtype=None):
                 return self
 
         class Processor:
@@ -99,6 +102,8 @@ class BenchmarkCoreTests(unittest.TestCase):
                 return [" recognized text "]
 
         class Model:
+            dtype = object()
+
             def generate(self, **kwargs):
                 self.kwargs = kwargs
                 return [1]
@@ -118,6 +123,48 @@ class BenchmarkCoreTests(unittest.TestCase):
         self.assertEqual(result.text, "recognized text")
         self.assertEqual(adapter.model.kwargs["max_new_tokens"], 77)
         self.assertFalse(adapter.model.kwargs["do_sample"])
+
+    def test_phowhisper_transcribe_casts_float_features_to_model_dtype(self):
+        model_dtype = object()
+
+        class Tensor:
+            def __init__(self):
+                self.cast = None
+
+            def is_floating_point(self):
+                return True
+
+            def to(self, device, dtype=None):
+                self.cast = (device, dtype)
+                return self
+
+        class Processor:
+            def __init__(self, features):
+                self.features = features
+
+            def __call__(self, waveform, sampling_rate, return_tensors):
+                return {"input_features": self.features}
+
+            def batch_decode(self, generated, skip_special_tokens):
+                return ["text"]
+
+        class Model:
+            dtype = model_dtype
+
+            def generate(self, **kwargs):
+                return [1]
+
+        torch = types.ModuleType("torch")
+        torch.inference_mode = contextlib.nullcontext
+        features = Tensor()
+        adapter = PhoWhisperAdapter()
+        adapter.processor = Processor(features)
+        adapter.model = Model()
+        adapter.device = "cuda:0"
+        with mock.patch.dict(sys.modules, {"torch": torch}):
+            adapter.transcribe(AudioInput(Path("x.wav"), [0.0], 16000))
+
+        self.assertEqual(features.cast, ("cuda:0", model_dtype))
 
     def test_phowhisper_load_uses_transformers_dtype_argument(self):
         captured = {}
