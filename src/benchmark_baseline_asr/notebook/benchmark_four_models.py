@@ -95,6 +95,36 @@ def _run_git(args: list[str], *, capture: bool = False) -> str:
     return result.stdout if capture else ""
 
 
+def refresh_managed_source(source_dir: Path) -> Path:
+    """Update an existing source-manager checkout to the configured branch head."""
+    marker_path = source_dir / ".source_manager.json"
+    if not marker_path.is_file():
+        return source_dir
+
+    marker = json.loads(marker_path.read_text(encoding="utf-8"))
+    current_commit = _run_git(["git", "-C", str(source_dir), "rev-parse", "HEAD"], capture=True).strip()
+    if (marker.get("repo_url"), marker.get("requested_ref"), marker.get("commit")) != (
+        SOURCE_REPO_URL, SOURCE_REF, current_commit
+    ):
+        raise ValueError(f"Source marker does not match the existing checkout: {source_dir}")
+
+    changes = _run_git(
+        ["git", "-C", str(source_dir), "status", "--porcelain", "--untracked-files=no"], capture=True
+    ).strip()
+    if changes:
+        raise ValueError(f"Managed source has local tracked changes; refusing to replace them: {source_dir}")
+
+    _run_git(["git", "-C", str(source_dir), "fetch", "--depth=1", "origin", SOURCE_REF])
+    remote_commit = _run_git(["git", "-C", str(source_dir), "rev-parse", "FETCH_HEAD"], capture=True).strip()
+    if remote_commit != current_commit:
+        _run_git(["git", "-C", str(source_dir), "reset", "--hard", "FETCH_HEAD"])
+        current_commit = remote_commit
+
+    marker["commit"] = current_commit
+    marker_path.write_text(json.dumps(marker, indent=2) + "\n", encoding="utf-8")
+    return source_dir
+
+
 def clone_source() -> Path:
     """Sparse-clone the configured source and leave a source_manager marker."""
     source_dir = Path(os.environ.get("ASR_SOURCE_DIR", str(SOURCE_DIR_DEFAULT))).expanduser().resolve()
@@ -126,7 +156,7 @@ def clone_source() -> Path:
                 encoding="utf-8",
             )
         os.environ["ASR_SOURCE_PATH"] = str(source_dir)
-        return source_dir
+        return refresh_managed_source(source_dir)
 
     source_dir.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".asr-source-download-", dir=source_dir.parent))
@@ -166,6 +196,8 @@ try:
     PROJECT_ROOT = find_project_root()
 except FileNotFoundError:
     PROJECT_ROOT = clone_source()
+
+PROJECT_ROOT = refresh_managed_source(PROJECT_ROOT)
 
 os.environ["ASR_PROJECT_ROOT"] = str(PROJECT_ROOT)
 SOURCE_ROOT = PROJECT_ROOT / "src"
@@ -277,16 +309,41 @@ def print_comparison(rows: list[dict[str, Any]]) -> None:
 # %%
 def run_model_smoke_test(config_path: Path, samples: list[Any], resolved_models: dict[str, dict]) -> list[dict]:
     from benchmark_baseline_asr.application.config_service import resolve_experiment
-    from benchmark_baseline_asr.workflow.smoke_test import smoke_test_models
+    from benchmark_baseline_asr.application.audio_service import prepare_audio
+    from benchmark_baseline_asr.infrastructure.models.factory import create_adapter
+    from benchmark_baseline_asr.infrastructure.runtime.reproducibility import configure_determinism
+    from benchmark_baseline_asr.infrastructure.runtime.timing import timed_call
 
     config = resolve_experiment(config_path, ENVIRONMENT)
-    results = smoke_test_models(
-        samples,
-        config["models"],
-        resolved_models,
-        config["_loaded"]["audio"],
-        config["_loaded"]["runtime"],
-    )
+    if not samples:
+        raise ValueError("Cannot smoke-test ASR models: the prepared dataset has no samples.")
+    sample = sorted(samples, key=lambda row: (row.duration_seconds, row.sample_id))[len(samples) // 2]
+    audio = prepare_audio(sample.audio_path, config["_loaded"]["audio"])
+    runtime = dict(config["_loaded"]["runtime"])
+    runtime["device"] = "cuda:0"
+    configure_determinism(runtime.get("seed", 0), runtime.get("cpu_threads_per_worker", 2))
+
+    results = []
+    for model in config["models"]:
+        model_key = model["key"]
+        model_config = model["settings"]
+        adapter = create_adapter(model_config["adapter"])
+        try:
+            adapter.load(resolved_models[model_key]["path"], model_config, runtime)
+            transcription, latency_seconds = timed_call(
+                lambda: adapter.transcribe(audio), device=runtime["device"]
+            )
+            results.append(
+                {
+                    "model": model_key,
+                    "sample_id": sample.sample_id,
+                    "text": transcription.text,
+                    "latency_seconds": latency_seconds,
+                }
+            )
+        finally:
+            adapter.unload()
+
     print("\nSmoke-test results (one sample per model):")
     for row in results:
         print(f"- {row['model']}: {row['latency_seconds']:.2f}s — {row['text'][:240]}")
