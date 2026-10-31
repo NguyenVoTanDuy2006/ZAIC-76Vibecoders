@@ -7,6 +7,35 @@ PiSSA có metadata `converted_standard_lora`, nạp trên base gốc; AdaLoRA gi
 `rank_pattern` đã học. Cả hai dùng `Qwen/Qwen3-ASR-1.7B-hf`, revision
 `bcd2b5b7f32b480ab5790554cfa8347f246a14f3`.
 
+## Kaggle — bản chạy cho thí nghiệm này
+
+Import script `output/jupyter-notebook/benchmark-qwen-full-adapters-kaggle.py`
+vào Kaggle. Bản Kaggle dùng `.py` với các cell `# %%`, cài bằng pip.
+
+1. Add Input dataset Zalo chứa `train.jsonl` và `audio/`.
+2. Add Input chứa hai run `qwen_pissa_full`, `qwen_adalora_full`; có thể là
+   hai datasets riêng. Giữ `best_epoch.txt`, metadata run và checkpoint được
+   chọn. PiSSA cần `training_method.json` trong checkpoint; AdaLoRA cần
+   `run_config.json` để xác định revision base.
+3. Bật Internet, chọn GPU (T4 ×2 hoặc một GPU), cấp quyền Secret `HF_TOKEN`
+   nếu dùng token. Không upload `.env`.
+4. Nếu tên folder khác hoặc gắn nhiều bản dataset, điền `DATASET_ROOT_OVERRIDE`,
+   `PISSA_RUN_OVERRIDE`, `ADALORA_RUN_OVERRIDE` trong cell cấu hình.
+5. Run All: chuẩn bị → smoke test hai mẫu cho cả hai adapter → full train →
+   bảng so sánh và nghe theo sample.
+
+Script tự sparse-clone source benchmark đã khóa commit `d564ee3`, chuẩn bị
+Python 3.12 kể cả khi kernel là 3.13, tạo venv riêng, tự bổ sung pip nếu thiếu.
+Torch được khóa 2.6.0 CUDA 12.4 theo [wheel chính thức](https://pytorch.org/get-started/previous-versions/#v260);
+Transformers/PEFT giữ phiên bản huấn luyện. Không cài vào môi trường kernel.
+
+Input chỉ đọc từ `/kaggle/input`. Config, prediction, log và ZIP nằm dưới
+`/kaggle/working/qwen-adapter-benchmark`; source, Python, venv, cache base nằm
+dưới `/kaggle/temp/qwen-adapter-benchmark`, không được đóng vào ZIP kết quả.
+`GPU_IDS=None` tự dùng các GPU nhìn thấy. Giữ RUN_ID để resume trong cùng
+session; đổi RUN_ID khi đổi đầu vào/cấu hình. Session mới phải chuẩn bị lại
+cache/môi trường tạm; resume hiện không tự import ZIP từ session trước.
+
 ## Môi trường riêng
 
 Các adapter được train bằng Transformers 5.17.0 và PEFT 0.21.1. Môi trường
