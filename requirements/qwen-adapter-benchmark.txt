@@ -1,0 +1,14 @@
+# Separate environment: qwen-asr==0.0.6 requires Transformers 4.
+# Match the versions recorded in the supplied full training runs.
+transformers==5.17.0
+peft==0.21.1
+torch>=2.5,<3
+accelerate>=1.12,<2
+huggingface-hub>=1.5,<2
+numpy>=2,<3
+soundfile>=0.13,<1
+librosa>=0.11,<1
+python-dotenv>=1,<2
+ipykernel>=6,<8
+ipython>=8
+pandas>=2
