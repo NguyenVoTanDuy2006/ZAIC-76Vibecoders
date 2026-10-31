@@ -1,10 +1,11 @@
 # %% [markdown]
 # # Qwen ASR 1.7B — PiSSA full và AdaLoRA full trên Kaggle
 #
-# **Chuẩn bị:** Add Input dataset Zalo có `train.jsonl` và `audio/`, cùng hai
-# thư mục `qwen_pissa_full`, `qwen_adalora_full`. Mỗi thư mục model cần giữ
-# `best_epoch.txt`, metadata run và thư mục `epoch_*_adapter` tương ứng.
-# Hai model có thể nằm trong hai Kaggle datasets khác nhau.
+# **Chuẩn bị:** Add Input dataset Zalo có `train.jsonl` và `audio/`.
+# Add Input hai Kaggle Models `nvtd1796/qwen3-asr-vimd-adapters`:
+# `pytorch/pissa-full/1` và `pytorch/adalora-full/1`.
+# Đọc model_id, revision, adapter_path, dtype từ JSON giống module Research.
+# adapter_path trỏ thẳng tới folder chứa adapter_config.json và adapter_model.safetensors.
 # Bật Internet, chọn GPU T4 ×2 (một GPU cũng được), thêm Secret `HF_TOKEN` nếu cần.
 #
 # Script tự lấy source benchmark đã khóa commit, không cần upload repo hoặc `.env`.
@@ -15,6 +16,7 @@
 # %%
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -22,17 +24,18 @@ from pathlib import Path
 
 INPUT_ROOT = Path("/kaggle/input")
 OUTPUT_ROOT = Path("/kaggle/working/qwen-adapter-benchmark")
-SCRATCH_ROOT = Path("/kaggle/temp/qwen-adapter-benchmark")
+SCRATCH_ROOT = Path("/kaggle/temp/qwen-adapter-benchmark-configs")
 DATASET_ROOT_OVERRIDE = None  # Folder chứa train.jsonl và audio/
-PISSA_RUN_OVERRIDE = None     # Folder chứa best_epoch.txt của PiSSA FULL
-ADALORA_RUN_OVERRIDE = None   # Folder chứa best_epoch.txt của AdaLoRA FULL
+MODEL_CONFIG_PATHS_OVERRIDE = None  # Hoặc [Path(.../pissa.json), Path(.../adalora.json)] trong Input
+# Mặc định adapter_path đã đúng theo hai config Research. Chỉ sửa khi mount khác:
+ADAPTER_PATH_OVERRIDES = {}  # {"qwen_vimd_pissa_full": Path("/kaggle/input/.../pissa-full/1"), ...}
 PYTHON312_OVERRIDE = None     # Không cần đặt khi để script tự chuẩn bị Python
 GPU_IDS = None               # None = dùng các GPU nhìn thấy; hoặc [0], [0, 1]
-RUN_ID = "qwen-full-train-v1"  # Giữ nguyên để resume trong cùng session
+RUN_ID = "qwen-full-train-config-v1"  # Giữ nguyên để resume trong cùng session
 INSTALL_DEPENDENCIES = True
 HF_SECRET_LABEL = "HF_TOKEN"
 SOURCE_REPO = "https://github.com/NguyenVoTanDuy2006/ZAIC-76Vibecoders.git"
-SOURCE_COMMIT = "d564ee3d581e3a73f3f182b56327abcf20865841"
+SOURCE_COMMIT = "9a96f3aaf38d428031144678a4fd33605af9ff16"
 SOURCE_ROOT = SCRATCH_ROOT / "source"
 VENV_PYTHON = SCRATCH_ROOT / "venv/bin/python"
 BASE_CACHE = SCRATCH_ROOT / "base-models"
@@ -58,40 +61,35 @@ def discover_train_root(input_root, override=None):
     return candidates[0]
 
 
-def discover_adapter_run(input_root, method, override=None):
-    label = f"{method.upper()}_RUN_OVERRIDE"
-    expected = "LORA" if method == "pissa" else "ADALORA"
-    def valid(path):
-        try:
-            epoch = int((path / "best_epoch.txt").read_text().strip())
-            checkpoint = path / f"epoch_{epoch}_adapter"
-            config = json.loads((checkpoint / "adapter_config.json").read_text())
-            return epoch > 0 and config.get("peft_type") == expected and (checkpoint / "adapter_model.safetensors").is_file()
-        except (OSError, ValueError, TypeError):
-            return False
-    if override is not None:
-        path = Path(override).expanduser().resolve()
-        if not valid(path):
-            raise ValueError(f"{label} cần trỏ tới run có best_epoch.txt và adapter {expected}: {path}")
-        return path
-    candidates = sorted({p.resolve() for p in Path(input_root).rglob(f"qwen_{method}_full") if valid(p)})
-    if len(candidates) != 1:
-        raise ValueError(f"Đặt {label}; tìm thấy {len(candidates)} run full phù hợp: {candidates}")
-    return candidates[0]
-
-
-def stage_adapter_links(pissa_run, adalora_run, target):
+def resolve_model_configs(source_root, target, *, config_paths=None, adapter_overrides=None):
+    config_root = Path(source_root) / "src/benchmark_baseline_asr/configs/models"
+    config_paths = ([config_root / f"qwen_vimd_{method}_full.json" for method in ("pissa", "adalora")]
+                    if config_paths is None else [Path(p).expanduser().resolve() for p in config_paths])
+    documents = [json.loads(p.read_text(encoding="utf-8")) for p in config_paths]
+    overrides = adapter_overrides or {}
+    unknown = set(overrides) - {d["model"]["key"] for d in documents}
+    if unknown:
+        raise ValueError(f"Unknown adapter override keys: {sorted(unknown)}")
+    for path, document in zip(config_paths, documents):
+        spec = document["model"]
+        checkpoint = Path(overrides.get(spec["key"], spec["adapter_path"])).expanduser()
+        checkpoint = (path.parent / checkpoint).resolve() if not checkpoint.is_absolute() else checkpoint.resolve()
+        for filename in ("adapter_config.json", "adapter_model.safetensors"):
+            if not (checkpoint / filename).is_file():
+                raise FileNotFoundError(f"Add Input model {spec['key']}; thiếu {filename} tại {checkpoint}. "
+                                        "Kiểm tra ADAPTER_PATH_OVERRIDES nếu đường dẫn mount khác.")
+        spec["adapter_path"] = str(checkpoint)
     target = Path(target)
     target.mkdir(parents=True, exist_ok=True)
-    for method, source in (("pissa", pissa_run), ("adalora", adalora_run)):
-        link = target / f"qwen_{method}_full"
-        source = Path(source).resolve()
-        if link.exists() or link.is_symlink():
-            if not link.is_symlink() or link.resolve() != source:
-                raise ValueError(f"Adapter Input đã đổi; đặt SCRATCH_ROOT mới: {link}")
-        else:
-            link.symlink_to(source, target_is_directory=True)
-    return target.resolve()
+    paths = []
+    for document in documents:
+        key = document["model"]["key"]
+        if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", key):
+            raise ValueError("model.key phải là tên file đơn giản")
+        path = target / f"{key}.json"
+        path.write_text(json.dumps(document, ensure_ascii=False, indent=2) + "\n")
+        paths.append(path)
+    return paths
 
 
 def bootstrap_source(target, repo, revision):
@@ -147,7 +145,7 @@ def find_python312():
 
 def prepare_run(run_id, *, limit=None):
     command = [VENV_PYTHON, "-m", "benchmark_baseline_asr.workflow.benchmark_qwen_adapters",
-               "--models-root", MODELS_ROOT, "--dataset-root", DATASET_ROOT,
+               "--model-configs", *MODEL_CONFIG_FILES, "--dataset-root", DATASET_ROOT,
                "--output-root", OUTPUT_ROOT, "--run-id", run_id, "--prepare-only",
                "--gpu-ids", *GPU_IDS]
     if limit is not None:
@@ -171,9 +169,10 @@ def infer_run(config_path, run_id):
 # %% [markdown]
 # ## 1. Input, source và token
 #
-# Các override trỏ tới thư mục run, không trỏ thẳng tới `epoch_2_adapter`.
-# Giữ `run_config.json` của AdaLoRA và `training_method.json` của PiSSA để khóa
-# đúng base/revision. Các symlink được tạo ở thư mục tạm, không ghi vào Input.
+# Hai model JSON mặc định được lấy cùng source, giữ đúng cấu trúc Research.
+# adapter_path trỏ trực tiếp tới Kaggle Model version chứa hai file PEFT.
+# Không cần best_epoch.txt hoặc run_config.json. Base revision được khóa trong JSON.
+# Các config sau override được ghi vào thư mục tạm; Input và source không bị sửa.
 
 # %%
 if __name__ == "__main__":
@@ -182,10 +181,11 @@ if __name__ == "__main__":
     if not SCRATCH_ROOT.resolve().is_relative_to(Path("/kaggle/temp")):
         raise ValueError("SCRATCH_ROOT phải nằm dưới /kaggle/temp")
     DATASET_ROOT = discover_train_root(INPUT_ROOT, DATASET_ROOT_OVERRIDE)
-    pissa_run = discover_adapter_run(INPUT_ROOT, "pissa", PISSA_RUN_OVERRIDE)
-    adalora_run = discover_adapter_run(INPUT_ROOT, "adalora", ADALORA_RUN_OVERRIDE)
-    MODELS_ROOT = stage_adapter_links(pissa_run, adalora_run, SCRATCH_ROOT / "adapter-links")
     bootstrap_source(SOURCE_ROOT, SOURCE_REPO, SOURCE_COMMIT)
+    MODEL_CONFIG_FILES = resolve_model_configs(
+        SOURCE_ROOT, SCRATCH_ROOT / "model-configs", config_paths=MODEL_CONFIG_PATHS_OVERRIDE,
+        adapter_overrides=ADAPTER_PATH_OVERRIDES,
+    )
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
     child_env = os.environ.copy()
     child_env.update(PYTHONPATH=str(SOURCE_ROOT / "src"), PYTHONUNBUFFERED="1",
@@ -199,7 +199,10 @@ if __name__ == "__main__":
         del token
     except Exception:
         pass  # Base công khai; có thể dùng HF_TOKEN từ environment nếu Secret chưa được gắn.
-    print("Train:", DATASET_ROOT, "\nPiSSA:", pissa_run, "\nAdaLoRA:", adalora_run)
+    print("Train:", DATASET_ROOT)
+    for path in MODEL_CONFIG_FILES:
+        model_spec = json.loads(path.read_text())["model"]
+        print(model_spec["key"], model_spec["adapter_path"], "base revision:", model_spec["revision"])
     print("Output:", OUTPUT_ROOT, "\nSource commit:", SOURCE_COMMIT)
     print("HF_TOKEN configured:", bool(child_env.get("HF_TOKEN")))
 
@@ -240,7 +243,7 @@ if __name__ == "__main__":
 # ## 3. Kiểm tra toàn bộ train
 #
 # Mặc định không giới hạn số mẫu. Dữ liệu hiện tại có 1.545 mẫu (~3,10 giờ).
-# Kiểm tra checkpoint, SHA-256, base revision và mọi WAV trước khi inference.
+# Kiểm tra adapter theo config, SHA-256, base revision và mọi WAV trước khi inference.
 
 # %%
 if __name__ == "__main__":
@@ -249,7 +252,8 @@ if __name__ == "__main__":
     identity = json.loads((RUN_DIR / "adapter_benchmark.json").read_text())
     print("Samples:", len(manifest), "Audio hours:", round(sum(r["duration_seconds"] for r in manifest) / 3600, 3))
     for model in identity["models"]:
-        print(model["key"], "epoch", model["settings"]["epoch"], "base revision", model["settings"]["revision"])
+        print(model["key"], model["settings"].get("display_name", ""),
+              "base revision", model["settings"]["revision"])
 
 # %% [markdown]
 # ## 4. Smoke test hai mẫu với cả hai adapter

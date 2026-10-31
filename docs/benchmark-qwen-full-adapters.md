@@ -1,10 +1,11 @@
 # Benchmark Qwen ASR 1.7B PiSSA / AdaLoRA trên Zalo train
 
-Hai model được chọn từ `qwen_pissa_full` và `qwen_adalora_full`, theo
-`best_epoch.txt`. Với artifacts hiện tại, cả hai là `epoch_2_adapter`.
-Không dùng bản `small`, không dùng `pissa_initial` hoặc checkpoint optimizer.
-PiSSA có metadata `converted_standard_lora`, nạp trên base gốc; AdaLoRA giữ
-`rank_pattern` đã học. Cả hai dùng `Qwen/Qwen3-ASR-1.7B-hf`, revision
+Hai model Kaggle được đọc từ `configs/models/qwen_vimd_pissa_full.json`
+và `qwen_vimd_adalora_full.json` trong package `benchmark_baseline_asr`,
+giữ nguyên cấu trúc config Research: `model.key`, `backend`, `model_id`,
+`revision`, `adapter_path`, `display_name`, `dtype`, `trust_remote_code`.
+PiSSA đã chuyển thành LoRA trên base gốc; AdaLoRA giữ `rank_pattern` đã học.
+Cả hai dùng `Qwen/Qwen3-ASR-1.7B-hf`, revision
 `bcd2b5b7f32b480ab5790554cfa8347f246a14f3`.
 
 ## Kaggle — bản chạy cho thí nghiệm này
@@ -13,25 +14,33 @@ Import script `output/jupyter-notebook/benchmark-qwen-full-adapters-kaggle.py`
 vào Kaggle. Bản Kaggle dùng `.py` với các cell `# %%`, cài bằng pip.
 
 1. Add Input dataset Zalo chứa `train.jsonl` và `audio/`.
-2. Add Input chứa hai run `qwen_pissa_full`, `qwen_adalora_full`; có thể là
-   hai datasets riêng. Giữ `best_epoch.txt`, metadata run và checkpoint được
-   chọn. PiSSA cần `training_method.json` trong checkpoint; AdaLoRA cần
-   `run_config.json` để xác định revision base.
+2. Add Input hai Kaggle Model versions của `nvtd1796/qwen3-asr-vimd-adapters`:
+   `pytorch/pissa-full/1` và `pytorch/adalora-full/1`.
+   Mỗi version chứa trực tiếp `adapter_config.json`, `adapter_model.safetensors`.
+   Không cần thư mục run, `best_epoch.txt` hoặc `run_config.json` cho chế độ config.
 3. Bật Internet, chọn GPU (T4 ×2 hoặc một GPU), cấp quyền Secret `HF_TOKEN`
    nếu dùng token. Không upload `.env`.
-4. Nếu tên folder khác hoặc gắn nhiều bản dataset, điền `DATASET_ROOT_OVERRIDE`,
-   `PISSA_RUN_OVERRIDE`, `ADALORA_RUN_OVERRIDE` trong cell cấu hình.
+4. Nếu mount khác, điền `ADAPTER_PATH_OVERRIDES` theo `model.key`.
+   Nếu có config riêng, đặt `MODEL_CONFIG_PATHS_OVERRIDE` thành danh sách hai
+   file JSON. Nếu có nhiều tập train, đặt `DATASET_ROOT_OVERRIDE`.
 5. Run All: chuẩn bị → smoke test hai mẫu cho cả hai adapter → full train →
    bảng so sánh và nghe theo sample.
 
-Script tự sparse-clone source benchmark đã khóa commit `d564ee3`, chuẩn bị
+Đường dẫn adapter mặc định từ config:
+
+```text
+/kaggle/input/models/nvtd1796/qwen3-asr-vimd-adapters/pytorch/pissa-full/1
+/kaggle/input/models/nvtd1796/qwen3-asr-vimd-adapters/pytorch/adalora-full/1
+```
+
+Script tự sparse-clone source benchmark đã khóa commit `9a96f3a`, chuẩn bị
 Python 3.12 kể cả khi kernel là 3.13, tạo venv riêng, tự bổ sung pip nếu thiếu.
 Torch được khóa 2.6.0 CUDA 12.4 theo [wheel chính thức](https://pytorch.org/get-started/previous-versions/#v260);
 Transformers/PEFT giữ phiên bản huấn luyện. Không cài vào môi trường kernel.
 
 Input chỉ đọc từ `/kaggle/input`. Config, prediction, log và ZIP nằm dưới
 `/kaggle/working/qwen-adapter-benchmark`; source, Python, venv, cache base nằm
-dưới `/kaggle/temp/qwen-adapter-benchmark`, không được đóng vào ZIP kết quả.
+dưới `/kaggle/temp/qwen-adapter-benchmark-configs`, không được đóng vào ZIP kết quả.
 `GPU_IDS=None` tự dùng các GPU nhìn thấy. Giữ RUN_ID để resume trong cùng
 session; đổi RUN_ID khi đổi đầu vào/cấu hình. Session mới phải chuẩn bị lại
 cache/môi trường tạm; resume hiện không tự import ZIP từ session trước.
@@ -54,7 +63,19 @@ số GPU được cấu hình. Một GPU là mặc định, hai GPU cũng đư�
 
 ## CLI
 
-Từ thư mục gốc repository, chuẩn bị và kiểm tra dữ liệu trên CPU:
+Từ thư mục gốc repository, trên máy có các Kaggle Models đã mount, chuẩn bị
+bằng config JSON:
+
+```bash
+PYTHONPATH=src python -m benchmark_baseline_asr.workflow.benchmark_qwen_adapters \
+  --model-configs src/benchmark_baseline_asr/configs/models/qwen_vimd_pissa_full.json \
+                  src/benchmark_baseline_asr/configs/models/qwen_vimd_adalora_full.json \
+  --dataset-root /kaggle/input/your-dataset/train \
+  --run-id qwen-full-train-config-v1 --prepare-only
+```
+
+Chế độ local cũ vẫn chọn `epoch_<best_epoch>_adapter` từ hai thư mục full
+chứa `best_epoch.txt` và metadata run:
 
 ```bash
 PYTHONPATH=src /tmp/qwen-adapter-benchmark/bin/python -m benchmark_baseline_asr.workflow.benchmark_qwen_adapters \

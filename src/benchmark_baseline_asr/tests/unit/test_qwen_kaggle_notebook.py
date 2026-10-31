@@ -49,23 +49,22 @@ class QwenKaggleNotebookTests(unittest.TestCase):
         self.assertEqual(self.module.discover_train_root(self.inputs, self.inputs / "second"),
                          (self.inputs / "second").resolve())
 
-    def test_independent_adapter_datasets_are_staged_without_copying_weights(self):
+    def test_model_configs_point_directly_to_kaggle_exports_without_copying_weights(self):
         pissa = self.make_run("pissa", "pissa-upload")
         adalora = self.make_run("adalora", "adalora-upload")
-        self.assertEqual(self.module.discover_adapter_run(self.inputs, "pissa"), pissa.resolve())
-        self.assertEqual(self.module.discover_adapter_run(self.inputs, "adalora"), adalora.resolve())
-        root = self.module.stage_adapter_links(pissa, adalora, self.root / "scratch/models")
-        self.assertTrue((root / "qwen_pissa_full").is_symlink())
-        self.assertEqual((root / "qwen_adalora_full").resolve(), adalora.resolve())
-        self.module.stage_adapter_links(pissa, adalora, root)
-        self.assertEqual((pissa / "best_epoch.txt").read_text(), "2")
+        paths = self.module.resolve_model_configs(Path.cwd(), self.root / "configs", adapter_overrides={
+            "qwen_vimd_pissa_full": pissa / "epoch_2_adapter",
+            "qwen_vimd_adalora_full": adalora / "epoch_2_adapter",
+        })
+        first = json.loads(paths[0].read_text())
+        self.assertEqual(first["model"]["adapter_path"], str(pissa / "epoch_2_adapter"))
+        self.assertEqual(first["model"]["backend"], "qwen3_asr")
+        self.assertFalse((self.root / "configs/adapter_model.safetensors").exists())
 
-    def test_ambiguous_adapter_does_not_silently_choose(self):
-        first = self.make_run("pissa", "one")
-        self.make_run("pissa", "two")
-        with self.assertRaisesRegex(ValueError, "PISSA_RUN_OVERRIDE"):
-            self.module.discover_adapter_run(self.inputs, "pissa")
-        self.assertEqual(self.module.discover_adapter_run(self.inputs, "pissa", first), first.resolve())
+    def test_adapter_override_key_typo_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Unknown.*override"):
+            self.module.resolve_model_configs(Path.cwd(), self.root / "configs",
+                                               adapter_overrides={"typo": self.root})
 
     def test_sparse_source_bootstrap_is_pinned_and_reusable(self):
         repo = self.root / "repo"
@@ -103,7 +102,7 @@ class QwenKaggleNotebookTests(unittest.TestCase):
         for run in runs:
             cfg_path = run / "epoch_2_adapter/adapter_config.json"
             cfg = json.loads(cfg_path.read_text())
-            cfg.update(base_model_name_or_path="Qwen/Qwen3-ASR-1.7B-hf", revision="a" * 40,
+            cfg.update(base_model_name_or_path="Qwen/Qwen3-ASR-1.7B-hf", revision=None,
                        init_lora_weights=True, rank_pattern={"test.lora_E": [True]})
             cfg_path.write_text(json.dumps(cfg))
             if "pissa" in run.name:
@@ -117,7 +116,10 @@ class QwenKaggleNotebookTests(unittest.TestCase):
         manifest = '{"id":"test","audio":"audio/test.wav","audio_text":"xin chào"}\n'
         (data / "train.jsonl").write_text(manifest)
         m = self.module
-        m.MODELS_ROOT = m.stage_adapter_links(*runs, self.root / "scratch/adapter-links")
+        m.MODEL_CONFIG_FILES = m.resolve_model_configs(Path.cwd(), self.root / "scratch/configs", adapter_overrides={
+            "qwen_vimd_pissa_full": runs[0] / "epoch_2_adapter",
+            "qwen_vimd_adalora_full": runs[1] / "epoch_2_adapter",
+        })
         m.DATASET_ROOT, m.OUTPUT_ROOT, m.BASE_CACHE = data, self.root / "working", self.root / "scratch/cache"
         m.SOURCE_ROOT, m.VENV_PYTHON, m.GPU_IDS = Path.cwd(), sys.executable, [0]
         m.child_env = {**os.environ, "PYTHONPATH": str(Path.cwd() / "src")}
