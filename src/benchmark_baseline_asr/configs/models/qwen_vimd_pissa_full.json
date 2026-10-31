@@ -1,0 +1,14 @@
+{
+  "platform": "kaggle",
+  "model": {
+    "key": "qwen_vimd_pissa_full",
+    "backend": "qwen3_asr",
+    "model_id": "Qwen/Qwen3-ASR-1.7B-hf",
+    "revision": "bcd2b5b7f32b480ab5790554cfa8347f246a14f3",
+    "adapter_path": "/kaggle/input/models/nvtd1796/qwen3-asr-vimd-adapters/pytorch/pissa-full/1",
+    "display_name": "Qwen3-ASR 1.7B · PiSSA · full ViMD · best epoch 2",
+    "dtype": "float16",
+    "trust_remote_code": false
+  },
+  "run_id": "qwen_vimd_pissa_full"
+}

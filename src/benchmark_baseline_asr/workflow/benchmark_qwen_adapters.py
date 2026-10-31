@@ -10,13 +10,15 @@ from pathlib import Path
 
 from benchmark_baseline_asr.application.config_service import resolve_experiment
 from benchmark_baseline_asr.infrastructure.models.peft_checkpoints import discover_full_adapters
+from benchmark_baseline_asr.infrastructure.models.configured_adapters import load_adapter_model_configs
 from benchmark_baseline_asr.infrastructure.storage.artifacts import write_json
 from benchmark_baseline_asr.workflow.prepare_dataset import prepare
 
 
 def prepare_adapter_benchmark(
-    models_root: str | Path, dataset_root: str | Path, output_root: str | Path,
+    models_root: str | Path | None, dataset_root: str | Path, output_root: str | Path,
     run_id: str, *, gpu_ids: list[int] | None = None, limit: int | None = None,
+    model_config_paths: list[str | Path] | None = None,
 ):
     """Write a self-contained experiment config and validate every labelled WAV."""
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", run_id):
@@ -24,7 +26,10 @@ def prepare_adapter_benchmark(
     gpu_ids = [0] if gpu_ids is None else gpu_ids
     if not gpu_ids or len(set(gpu_ids)) != len(gpu_ids) or any(g < 0 for g in gpu_ids):
         raise ValueError("gpu_ids must contain unique nonnegative GPU indices")
-    models = discover_full_adapters(models_root)
+    if (models_root is None) == (model_config_paths is None):
+        raise ValueError("choose models_root or model_config_paths")
+    models = (load_adapter_model_configs(model_config_paths) if model_config_paths is not None
+              else discover_full_adapters(models_root))
     output_root = Path(output_root).expanduser().resolve()
     config_root = output_root / "configs" / run_id
     defaults_root = Path(__file__).resolve().parents[1] / "configs"
@@ -34,7 +39,7 @@ def prepare_adapter_benchmark(
     loaded["dataset"].update(root=str(Path(dataset_root).expanduser().resolve()), limit=limit)
     loaded["download"].update(models_dir=str(output_root / "models"), local_files_only=False)
     loaded["secrets"] = {"provider": "environment", "token_env": "HF_TOKEN"}
-    loaded["runtime"].update(dtype="float16", do_sample=False, num_beams=1)
+    loaded["runtime"].update(dtype=models[0]["settings"].get("dtype", "float16"), do_sample=False, num_beams=1)
     loaded["execution"].update(gpu_ids=gpu_ids, shard_count=len(gpu_ids), resume=True)
     loaded["metrics"]["semantic_score"] = {"enabled": False}
     loaded["reporting"]["output_dir"] = str(output_root / "runs")
@@ -96,7 +101,9 @@ def run_adapter_benchmark(config_path: str | Path, run_id: str) -> tuple[Path, l
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--models-root", required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--models-root", help="Legacy local training-run folders with best_epoch.txt")
+    source.add_argument("--model-configs", nargs="+", help="Research-style model JSON configs with direct adapter_path")
     parser.add_argument("--dataset-root", default="data/train+public_test/train")
     parser.add_argument("--output-root", default="output/qwen-adapter-benchmark")
     parser.add_argument("--run-id", default=None)
@@ -110,7 +117,8 @@ def main(argv=None) -> int:
         load_dotenv(args.env_file, override=True)
     run_id = args.run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     config_path, run_dir, samples = prepare_adapter_benchmark(
-        args.models_root, args.dataset_root, args.output_root, run_id, gpu_ids=args.gpu_ids, limit=args.limit)
+        args.models_root, args.dataset_root, args.output_root, run_id, gpu_ids=args.gpu_ids, limit=args.limit,
+        model_config_paths=args.model_configs)
     print(f"run_id={run_id}\nsamples={len(samples)}\naudio_hours={sum(s.duration_seconds for s in samples)/3600:.3f}\nconfig={config_path}")
     if not args.prepare_only:
         run_dir, rows = run_adapter_benchmark(config_path, run_id)
