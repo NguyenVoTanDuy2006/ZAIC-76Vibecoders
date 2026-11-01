@@ -17,13 +17,13 @@ Repo GitHub đã xác định:
 
 https://github.com/NguyenVoTanDuy2006/ZAIC-76Vibecoders.git
 
-Ref mặc định là nhánh hiện tại benchmark_base_asr_model; cho phép đổi sang branch/tag/commit qua JSON.
+Ref mặc định là nhánh hiện tại agent; cho phép đổi sang branch/tag/commit qua JSON.
 
 ## 2. Tải và xóa source trên Kaggle
 
-Đặt tiện ích source_manager/ và unit tests bên trong package src/benchmark_baseline_asr/ để gom toàn bộ thành phần benchmark vào cùng một thư mục. Source manager chỉ dùng Python standard library và lệnh Git; chạy được trước khi cài dependency ASR với PYTHONPATH=src.
+Đặt tiện ích source_manager/ và unit tests bên trong package src/asr_benchmark/ để gom toàn bộ thành phần benchmark vào cùng một thư mục. Source manager chỉ dùng Python standard library và lệnh Git; chạy được trước khi cài dependency ASR với PYTHONPATH=src.
 
-src/benchmark_baseline_asr/
+src/asr_benchmark/
 ├── source_manager/
 │   ├── __init__.py
 │   ├── config.json
@@ -47,10 +47,10 @@ Ví dụ cấu hình:
 
 {
   "repo_url": "https://github.com/NguyenVoTanDuy2006/ZAIC-76Vibecoders.git",
-  "ref": "benchmark_base_asr_model",
+  "ref": "agent",
   "source_dir": "/kaggle/working/_source/ZAIC-76Vibecoders",
   "include_paths": [
-    "src/benchmark_baseline_asr",
+    "src/asr_benchmark",
     "pyproject.toml",
     "uv.lock",
     "README.md"
@@ -78,7 +78,7 @@ Package được cài theo cách thông thường, không dùng editable install
 
 ## 3. Cây thư mục benchmark và luồng chạy
 
-src/benchmark_baseline_asr/
+src/asr_benchmark/
 ├── __init__.py
 ├── __main__.py
 │
