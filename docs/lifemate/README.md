@@ -3,8 +3,9 @@
 Nhánh làm việc: `agent`. Phần này nối ASR có sẵn của đội với notebook
 `notebooks/lifemate/run_agent.ipynb`. Code xử lý nằm trong `src/lifemate/`,
 notebook chỉ cấu hình và gọi module. ASR nhận audio và trả text; agent nhận text, context,
-history và schema tools để quyết định hành động. Chỗ tạo ToolEnv vẫn được chừa
-trong `src/lifemate/agent.py::load_toolenv()` để nhóm trưởng nối thư viện BTC.
+history và schema tools để quyết định hành động. Hook
+`src/lifemate/agent.py::load_toolenv()` nạp thư viện BTC từ đúng split và trả
+hàm tạo một ToolEnv riêng cho mỗi mẫu.
 
 ## 1. File nào làm gì?
 
@@ -173,9 +174,9 @@ ASR. `MODEL_SOURCE` cần là model ID đã cache hoặc thư mục Qwen/tokeniz
 Kết quả agent được lưu trong `<repo>/output/lifemate/agent/<run_id>` hoặc
 `/kaggle/working/lifemate/agent/<run_id>`. Qwen ở đây là **LLM agent 4B**, khác base **ASR 1.7B** của bước trước.
 
-Nhóm trưởng điền `load_toolenv()` theo đoạn mẫu được comment trong
-`src/lifemate/agent.py`:
-import đúng `zaic_tools` của split và trả hàm `make_env(id)`. Runner chỉ tạo một
+`load_toolenv()` trong `src/lifemate/agent.py` import đúng `zaic_tools` của split
+và trả hàm `make_env(id)` gọi `ToolEnv(split, id, root=data_root)`. Nếu kernel đã
+nạp thư viện của split khác, cần khởi động kernel mới. Runner chỉ tạo một
 env cho mỗi mẫu. Không đọc trực tiếp `*_environment` hoặc gọi `get_state()`.
 
 ### Các function chính

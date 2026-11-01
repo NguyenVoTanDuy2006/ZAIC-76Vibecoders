@@ -7,7 +7,7 @@ ASR và agent bàn giao qua file, có thể chạy bằng hai môi trường Pyt
 Nếu đã có adapter ASR được huấn luyện, bạn chạy nhận dạng trực tiếp; không cần
 huấn luyện lại để tạo prediction.
 Phần nối đã có test; suy luận ASR/Qwen thật trên GPU chưa được xác minh.
-`load_toolenv()` vẫn là chỗ nhóm trưởng điền trước khi chạy đầy đủ.
+`load_toolenv()` đã nối thư viện BTC của đúng split và trả factory tạo ToolEnv theo ID.
 
 | Bạn muốn làm gì? | Mở file nào? |
 |---|---|
@@ -149,15 +149,16 @@ assistant. Không có lượt user trong lịch sử thì dùng `history_user_te
 
 Nếu đã có file ASR hoàn chỉnh cho đúng split, có thể bắt đầu từ bước tiếp theo.
 
-### Bước 4 — Nhóm trưởng nối ToolEnv
+### Bước 4 — Chuẩn bị ToolEnv của đúng split
 
-Mở [src/lifemate/agent.py](src/lifemate/agent.py), điền `load_toolenv()` theo đoạn
-mẫu đã comment: nạp thư viện BTC của đúng split, trả về hàm tạo ToolEnv theo ID.
+Đảm bảo `DATA_ROOT/<split>/zaic_tools/` chứa thư viện BTC. Hàm `load_toolenv()` trong
+[src/lifemate/agent.py](src/lifemate/agent.py) nạp thư viện của đúng split và trả
+hàm tạo `ToolEnv(split, sample_id, root=data_root)` theo ID.
 Runner chỉ tạo một môi trường cho mỗi mẫu; các hành động trong history đã được
 môi trường khởi tạo sẵn, không gọi lại.
 
-**Hiện hàm này vẫn chừa trống.** Nếu chưa điền, bước chạy agent sẽ dừng bằng
-`NotImplementedError`, trước khi nạp Qwen. Không đọc trực tiếp `*_environment`
+Nếu kernel đã import `zaic_tools` từ split khác, cần khởi động kernel mới.
+Không đọc trực tiếp `*_environment`
 hay `state.json` để thay cho API công cụ.
 
 ### Bước 5 — Chạy notebook agent
