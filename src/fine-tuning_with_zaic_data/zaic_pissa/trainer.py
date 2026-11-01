@@ -196,7 +196,9 @@ class Trainer:
 
         self.scheduler = get_linear_schedule_with_warmup(self.optimizer, warmup, steps)
         self.scaler = (
-            torch.amp.GradScaler("cuda") if c["train"]["precision"] == "fp16" else None
+            torch.amp.GradScaler("cuda", init_scale=1024.0)
+            if c["train"]["precision"] == "fp16"
+            else None
         )
         self.controller = OptimizerController(
             self.optimizer,
