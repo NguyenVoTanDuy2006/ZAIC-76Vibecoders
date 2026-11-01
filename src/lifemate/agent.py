@@ -719,13 +719,13 @@ def load_toolenv(data_root, split):
     validate(name, arguments), call(name, arguments), get_tool_calls(),
     get_state_hash(). Không gọi get_state(), không mở *_environment trực tiếp.
     """
-    # TODO: nhóm trưởng kiểm tra đường dẫn/thư viện BTC rồi bỏ comment mẫu này,
-    # đồng thời xóa dòng raise. get_tool_env_factory đã kiểm tra đúng split.
-    # ToolEnv = get_tool_env_factory(data_root, split)
-    # def make_env(sample_id):
-    #     return ToolEnv(split, sample_id, root=data_root)
-    # return make_env
-    raise NotImplementedError("load_toolenv() để nối ToolEnv")
+    # Hook tích hợp BTC: chỉ nạp thư viện ở đây; runner tạo env theo từng mẫu.
+    ToolEnv = get_tool_env_factory(data_root, split)
+
+    def make_env(sample_id):
+        return ToolEnv(split, sample_id, root=data_root)
+
+    return make_env
 
 
 def prepare_audio_input(item, data_root, split):
