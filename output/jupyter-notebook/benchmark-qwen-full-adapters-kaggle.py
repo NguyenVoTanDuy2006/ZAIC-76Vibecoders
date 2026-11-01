@@ -61,8 +61,16 @@ def discover_train_root(input_root, override=None):
     return candidates[0]
 
 
+def benchmark_package(source_root):
+    """Use the current name; retain support for the immutable historical commit."""
+    for package in ("asr_benchmark", "benchmark_baseline_asr"):
+        if (Path(source_root) / "src" / package / "workflow/benchmark_qwen_adapters.py").is_file():
+            return package
+    raise FileNotFoundError("Source thiếu module benchmark Qwen adapters")
+
+
 def resolve_model_configs(source_root, target, *, config_paths=None, adapter_overrides=None):
-    config_root = Path(source_root) / "src/benchmark_baseline_asr/configs/models"
+    config_root = Path(source_root) / "src" / benchmark_package(source_root) / "configs/models"
     config_paths = ([config_root / f"qwen_vimd_{method}_full.json" for method in ("pissa", "adalora")]
                     if config_paths is None else [Path(p).expanduser().resolve() for p in config_paths])
     documents = [json.loads(p.read_text(encoding="utf-8")) for p in config_paths]
@@ -87,7 +95,7 @@ def resolve_model_configs(source_root, target, *, config_paths=None, adapter_ove
         if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", key):
             raise ValueError("model.key phải là tên file đơn giản")
         path = target / f"{key}.json"
-        path.write_text(json.dumps(document, ensure_ascii=False, indent=2) + "\n")
+        path.write_text(json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         paths.append(path)
     return paths
 
@@ -98,15 +106,17 @@ def bootstrap_source(target, repo, revision):
         target.parent.mkdir(parents=True, exist_ok=True)
         checked(["git", "clone", "--quiet", "--filter=blob:none", "--no-checkout", "--sparse", repo, target])
         checked(["git", "-C", target, "fetch", "--quiet", "--depth=1", "origin", revision])
-        checked(["git", "-C", target, "sparse-checkout", "set", "src/benchmark_baseline_asr", "requirements"])
+        # SOURCE_COMMIT predates the package rename; fetch either layout without
+        # modifying the pinned checkout or claiming a different source revision.
+        checked(["git", "-C", target, "sparse-checkout", "set", "--no-cone",
+                 "/src/asr_benchmark/", "/src/benchmark_baseline_asr/", "/requirements/"])
         checked(["git", "-C", target, "checkout", "--quiet", "--detach", "FETCH_HEAD"])
     origin = checked(["git", "-C", target, "remote", "get-url", "origin"], capture=True)
     commit = checked(["git", "-C", target, "rev-parse", "HEAD"], capture=True)
     changes = checked(["git", "-C", target, "status", "--porcelain", "--untracked-files=no"], capture=True)
     if origin != repo or commit != revision or changes:
         raise ValueError("Source có thay đổi hoặc sai revision; chọn SCRATCH_ROOT mới.")
-    if not (target / "src/benchmark_baseline_asr/workflow/benchmark_qwen_adapters.py").is_file():
-        raise FileNotFoundError("Source thiếu module benchmark Qwen adapters")
+    benchmark_package(target)
     (target / ".source_manager.json").write_text(json.dumps({
         "repo_url": repo, "requested_ref": revision, "commit": commit,
     }, indent=2) + "\n")
@@ -144,7 +154,7 @@ def find_python312():
 
 
 def prepare_run(run_id, *, limit=None):
-    command = [VENV_PYTHON, "-m", "benchmark_baseline_asr.workflow.benchmark_qwen_adapters",
+    command = [VENV_PYTHON, "-m", f"{benchmark_package(SOURCE_ROOT)}.workflow.benchmark_qwen_adapters",
                "--model-configs", *MODEL_CONFIG_FILES, "--dataset-root", DATASET_ROOT,
                "--output-root", OUTPUT_ROOT, "--run-id", run_id, "--prepare-only",
                "--gpu-ids", *GPU_IDS]
@@ -163,7 +173,7 @@ def prepare_run(run_id, *, limit=None):
 
 def infer_run(config_path, run_id):
     checked([VENV_PYTHON, "-c",
-             "import sys; from benchmark_baseline_asr.workflow.benchmark_qwen_adapters import run_adapter_benchmark; "
+             f"import sys; from {benchmark_package(SOURCE_ROOT)}.workflow.benchmark_qwen_adapters import run_adapter_benchmark; "
              "run_adapter_benchmark(sys.argv[1], sys.argv[2])", config_path, run_id], cwd=SOURCE_ROOT, env=child_env)
 
 # %% [markdown]
