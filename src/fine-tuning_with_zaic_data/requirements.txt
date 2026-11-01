@@ -1,0 +1,13 @@
+# Install torch==2.6.0 separately from the cu124 index before this file.
+torch==2.6.0
+transformers==5.17.0
+peft==0.21.1
+accelerate==1.12.0
+bert-score==0.3.13
+pyvi==0.1.1
+numpy==2.2.6
+scipy==1.15.3
+soundfile==0.13.1
+librosa==0.11.0
+huggingface-hub==1.33.0
+safetensors==0.8.0

@@ -1,0 +1,21 @@
+# Execution ledger — plan: 2026-11-01-zaic-qwen-pissa-scst.md
+
+- Start: approved CE + SCST plan, implementing inline. Existing dirty files are outside the new package and must be preserved.
+- Ruling: work in the existing feature branch and limit mutations to the new package/plan files — the user requested this exact workspace; no unrelated tracked files need editing.
+- Ruling: mount/cache/output locations are excluded from the resume config fingerprint; manifest fingerprint covers relative paths, PCM hashes, references and split membership — permits restoring a Kaggle run under a different mount without accepting changed training data.
+- Ruling: `latest.pt` is the durable epoch commit; move orphaned later-epoch outputs into `orphaned/` on resume — prevents accidental selection/packing of uncommitted adapters and preserves diagnostics; costs disk space until manually cleaned.
+- Ruling: support an attached source ZIP as well as GitHub source — the Kaggle launcher can run this reviewed checkout before publishing a shared branch; costs one additional Dataset attachment.
+- Configuration/data complete: real-data prepare validated 5,036 clips and split 4043/470/523; fingerprint `7924307966e3e2d3852a102eb5436895b3d801c92f8e55fc74c49b4ce54c390b`.
+- Objective/reward complete: actual native Qwen graph reaches encoder/decoder; real cached frozen PhoBERT checks short/empty/long text.
+- Lifecycle/trainer complete: native resume through epoch interruption, portable PiSSA conversion/reload, atomic write failure, partial accumulation, two-rank Gloo (including native Qwen) verified.
+- CLI/Kaggle/bundles complete: percent script, pip repair (mock + real pipless venv), Python provisioning, safe archive restore, source bundle path; dependency resolution RED (safetensors 0.7 incompatible) → GREEN (0.8).
+- Verification so far: new suite 27/27 passed in Torch 2.6 CPU + Transformers 5.17 / PEFT 0.21.1; no CUDA on this host. Formatting applied, final suite/review pending.
+- Fresh review: three Important findings (bundle commit boundary/stale metadata, runtime guard, concurrent run corruption); no Critical or Minor findings. All three reproduced RED before fixes.
+- Ruling: accept Python 3.12 patch changes while preserving original provenance and recording current runtime; require pinned dependency versions and compatible Torch build — enables fresh Kaggle provisioning without silently changing the ML stack; a patch-level Python regression remains possible.
+- Review set aside: actual T4 peak memory/throughput and quality gain require Kaggle smoke/full benchmark, as already specified in the plan; local CPU verification cannot establish those outcomes.
+- Final: fixed bundle snapshots — `test_archives_follow_checkpoint_boundary_and_rebuild_stale_metadata` RED→GREEN; reconstruct history/best/best export from committed checkpoint, exclude later epochs.
+- Final: fixed runtime provenance — `test_changed_runtime_is_rejected_without_overwriting_original_record` and Python compatibility test RED→GREEN; enforce requirements and preserve original record.
+- Final: fixed overlapping mutations — `test_overlapping_process_and_bundle_are_rejected_and_os_releases_lock` RED→GREEN; CLI/Trainer/archives use exclusive run leases owned by rank zero in DDP.
+- Final verification: 31/31 new tests passed with pinned numeric dependencies (NumPy2.2.6/SciPy1.15.3), Torch2.6 CPU, Transformers5.17/PEFT0.21.1; original benchmark tests45/45 passed. Native generation/replay sequence log probabilities agree to1e-5.
+- Manual integration: actual CLI prepare→smoke→train→resume→evaluate→bundle passed with tiny native Qwen, real frozen PhoBERT, two Gloo ranks and two loader workers/rank; logs `/tmp/zaic-cli-lifecycle.log`, fixtures `/tmp/zaic-cli-ei56vm9j`.
+- Final review minors deferred: none. Existing tracked user diff was compared byte-for-byte and preserved. No model1.7B GPU training was run locally; Kaggle smoke precedes full training.

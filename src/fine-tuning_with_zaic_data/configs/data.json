@@ -1,0 +1,4 @@
+{
+  "dataset": {"root": "/kaggle/input/datasets/khangl123/zalo-ai/train+public_test/train", "manifest": "train.jsonl", "include_history": true},
+  "split": {"seed": 1234, "validation_fraction": 0.1, "test_fraction": 0.1}
+}

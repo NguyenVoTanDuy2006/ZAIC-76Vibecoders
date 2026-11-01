@@ -1,0 +1,9 @@
+{
+  "model": {
+    "key": "qwen_zaic_pissa_scst", "backend": "qwen3_asr",
+    "model_id": "Qwen/Qwen3-ASR-1.7B-hf", "revision": "bcd2b5b7f32b480ab5790554cfa8347f246a14f3",
+    "adapter_path": null, "dtype": "float16", "trust_remote_code": false
+  },
+  "pissa": {"r": 8, "alpha": 16, "dropout": 0.0, "target_modules": ["q_proj", "v_proj"], "init_lora_weights": "pissa_niter_4", "init_seed": 1234},
+  "semantic": {"model_id": "vinai/phobert-base", "revision": "01daacda68afe13d83023d16ec647239e344a1e6", "num_layers": 12, "batch_size": 8, "word_segment": true, "idf": false, "rescale": false, "reference_cache_size": 512}
+}
