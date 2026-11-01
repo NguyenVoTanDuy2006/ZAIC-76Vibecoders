@@ -107,6 +107,7 @@ ENV = dict(
     TOKENIZERS_PARALLELISM="false",
     OMP_NUM_THREADS="2",
     MPLCONFIGDIR=str(TEMP / "matplotlib"),
+    MPLBACKEND="Agg",
 )
 try:
     from kaggle_secrets import UserSecretsClient
