@@ -11,6 +11,7 @@ def download_snapshot(
     token: str | None,
     *,
     local_files_only: bool = False,
+    allow_patterns: list[str] | None = None,
 ) -> tuple[Path, str]:
     from huggingface_hub import HfApi, snapshot_download
 
@@ -26,6 +27,7 @@ def download_snapshot(
     api = HfApi(token=token)
     resolved_revision = revision or api.model_info(repo_id).sha
     target.mkdir(parents=True, exist_ok=True)
-    snapshot_download(repo_id=repo_id, revision=resolved_revision, local_dir=str(target), token=token)
+    snapshot_download(repo_id=repo_id, revision=resolved_revision, local_dir=str(target), token=token,
+                      allow_patterns=allow_patterns)
     marker.write_text(json.dumps({"repo_id": repo_id, "revision": resolved_revision}, indent=2) + "\n", encoding="utf-8")
     return target, resolved_revision

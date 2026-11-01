@@ -20,7 +20,7 @@
 # | Model, môi trường và source công cụ tạm thời | `/kaggle/temp/audio-enhancement-survey/` |
 #
 # Mỗi phương pháp nhận cùng audio gốc. Các bản xử lý được nhóm theo sample để nghe A/B.
-# Notebook lưu thời gian xử lý, phiếu nghe CSV, DNSMOS và WER/CER tùy chọn; cuối notebook có ZIP
+# Notebook lưu thời gian xử lý, phiếu nghe CSV và WER/CER tùy chọn; cuối notebook có ZIP
 # chứa riêng kết quả của run để tải về từ Output.
 #
 # Đây là khảo sát thử nghiệm: model có thể thay đổi chi tiết lời nói. Không dùng bản gốc còn vang
@@ -205,11 +205,10 @@ print("Nguồn HF token:", HF_TOKEN_SOURCE)
 # `HF_TOKEN` lấy từ Kaggle Secrets ở mục 1; không được ghi vào cấu hình hay output.
 # SGMSE, SAM và phục hồi giọng nên thử trên GPU; mặc định chúng đều đang tắt.
 #
-# `RUN_DNSMOS`, `RUN_ASR` và `ASR_MODEL` được chọn ở cell cấu hình dưới đây; các mục 8/9 dùng lại lựa chọn này.
+# `RUN_ASR` và `ASR_MODEL` được chọn ở cell cấu hình dưới đây; mục 8 dùng lại lựa chọn này.
 
 # %%
 N_SAMPLES = 10
-RUN_DNSMOS = False
 RUN_ASR = False
 ASR_MODEL = "Qwen/Qwen3-ASR-1.7B"  # Hoặc đường dẫn model đã gắn trong Kaggle Input
 ASR_MAX_NEW_TOKENS = 448
@@ -281,7 +280,7 @@ display(pd.DataFrame(SAMPLES)[["sample_id", "audio_path", "reference"]])
 # %% [markdown]
 # ## 3. Cài môi trường riêng trên Kaggle
 #
-# Để `INSTALL_ENVS=None` để tự cài đúng các nhóm cần cho `ENABLED`, `RUN_DNSMOS` và `RUN_ASR`.
+# Để `INSTALL_ENVS=None` để tự cài đúng các nhóm cần cho `ENABLED` và `RUN_ASR`.
 # Đặt `[]` nếu đã cài trong session. Ví dụ chọn `frcrn` và `mossformergan` sẽ cài một môi trường ClearVoice.
 # Venv, source và model được đặt ở `/kaggle/temp/audio-enhancement-survey/`, không nằm trong ZIP kết quả.
 # Chúng có thể cần cài/tải lại khi Kaggle bắt đầu session mới; Internet cần bật cho bước này.
@@ -377,13 +376,10 @@ packages = {
     "deepfilter": ["numpy<2", "torch==2.1.2", "torchaudio==2.1.2", "deepfilternet==0.5.6"],
     "resemble": ["numpy<2", "torch==2.1.1", "torchaudio==2.1.1", "resemble-enhance==0.0.1"],
     "silero": ["torch==2.5.1", "torchaudio==2.5.1", "silero-vad"],
-    "metrics": ["torch==2.5.1", "torchaudio==2.5.1", "torchmetrics[audio]", "onnxruntime", "librosa", "requests", "gdown"],
     "asr": ["torch==2.5.1", "qwen-asr==0.0.6", "transformers==4.57.6", "accelerate==1.12.0", "huggingface-hub"],
 }
 if INSTALL_ENVS is None:
     groups_needed = {METHOD_ENV[method] for method in ENABLED}
-    if RUN_DNSMOS:
-        groups_needed.add("metrics")
     if RUN_ASR:
         groups_needed.add("asr")
     INSTALL_ENVS = sorted(groups_needed)
@@ -992,58 +988,7 @@ ratings.to_csv(rating_path, index=False)
 print("Điền điểm tại:", rating_path)
 
 # %% [markdown]
-# ## 8. DNSMOS tùy chọn: điểm giọng, nền và tổng thể
-#
-# Đặt `RUN_DNSMOS=True` ở mục 2; mục 3 tự cài môi trường `metrics`, rồi chạy cell này.
-# DNSMOS dự đoán SIG/BAK/OVRL; không cần clean reference. Đây là model dự đoán cảm nhận,
-# không phải phép đo chính xác độ vang hay độ đúng âm tiết. Không chỉ tối ưu BAK vì có thể
-# được nền yên nhưng giọng kém. Model DNSMOS có thể tải thêm weights lần đầu.
-
-# %%
-METRICS_SOURCE = r'''
-import json, sys
-from pathlib import Path
-import numpy as np
-import torch
-from scipy.io import wavfile
-from torchmetrics.functional.audio.dnsmos import deep_noise_suppression_mean_opinion_score
-job = json.loads(Path(sys.argv[1]).read_text())
-with Path(job['output']).open('w') as stream:
-    for row in job['rows']:
-        record = {k: row[k] for k in ('sample_id', 'method')}
-        try:
-            sr, x = wavfile.read(row['output_path'])
-            x = x.astype(np.float32)/32768
-            scores = deep_noise_suppression_mean_opinion_score(torch.from_numpy(x), sr, personalized=False, device=torch.device('cpu')).detach().cpu().numpy().reshape(-1)
-            record.update(zip(['dnsmos_p808', 'dnsmos_sig', 'dnsmos_bak', 'dnsmos_ovrl'], map(float, scores)))
-            record['status'] = 'ok'
-        except Exception as e:
-            record.update(status='error', error=str(e))
-        stream.write(json.dumps(record)+'\n'); stream.flush()
-'''
-
-# RUN_DNSMOS được cấu hình ở mục 2.
-dnsmos_df = pd.DataFrame()
-if RUN_DNSMOS:
-    metric_script = RUN_DIR / "dnsmos_worker.py"
-    metric_script.write_text(METRICS_SOURCE, encoding="utf-8")
-    metric_job = RUN_DIR / "dnsmos_job.json"
-    metric_job.write_text(json.dumps({"rows": ok[["sample_id", "method", "output_path"]].to_dict("records"), "output": str(RUN_DIR / "dnsmos.jsonl")}), encoding="utf-8")
-    py = python_for("metrics")
-    if not py.is_file():
-        raise FileNotFoundError("Cài môi trường metrics ở mục 3.")
-    completed = subprocess.run([str(py), str(metric_script), str(metric_job)], env=subprocess_environment(), capture_output=True, text=True, timeout=PROCESS_TIMEOUT_SECONDS)
-    (RUN_DIR / "dnsmos.log").write_text(redact(completed.stdout + "\n" + completed.stderr), encoding="utf-8")
-    if completed.returncode:
-        raise RuntimeError("DNSMOS worker lỗi; xem dnsmos.log")
-    dnsmos_df = pd.DataFrame([json.loads(line) for line in (RUN_DIR / "dnsmos.jsonl").read_text().splitlines()])
-    dnsmos_df.to_csv(RUN_DIR / "dnsmos.csv", index=False)
-    display(dnsmos_df)
-else:
-    print("DNSMOS chưa bật.")
-
-# %% [markdown]
-# ## 9. Chạy lại ASR và đo WER/CER tùy chọn
+# ## 8. Chạy lại ASR và đo WER/CER tùy chọn
 #
 # Đặt `RUN_ASR=True` ở mục 2; mục 3 tự cài môi trường `asr`. Chọn **một model cố định** cho mọi phương pháp.
 # Có thể dùng đường dẫn snapshot local hoặc model ID Hugging Face. Worker nạp Qwen3-ASR 1.7B một lần,
@@ -1158,12 +1103,12 @@ else:
     print("ASR chưa bật; chưa có bằng chứng phương pháp nào cải thiện WER/CER.")
 
 # %% [markdown]
-# ## 10. Gộp kết quả và kết luận khảo sát
+# ## 9. Gộp kết quả và kết luận khảo sát
 #
 # Chỉ so sánh điểm trên cùng tập mẫu thành công của mọi phương pháp được chọn.
 # Nếu một phương pháp thất bại toàn bộ, nó chỉ xuất hiện ở coverage chứ không có điểm chất lượng.
 # Ghi lại mẫu âm tiết bị đổi, đặc biệt phụ âm cuối, thanh điệu, số, phủ định và tên riêng.
-# DNSMOS/WER là hai góc nhìn khác nhau; không tự cộng thành một “điểm chất lượng tổng”.
+# Đối chiếu điểm nghe thủ công và WER/CER; ghi rõ các mẫu bị mất hoặc đổi âm tiết.
 # Mẫu 10 clip chỉ giúp chọn ứng viên; khi thấy cách tốt nên khảo sát tiếp trên mẫu random lớn hơn.
 
 # %%
@@ -1177,10 +1122,6 @@ def common_success_rows(frame):
     common = set.intersection(*sets) if sets else set()
     return valid[valid["sample_id"].isin(common)]
 
-dns_valid = common_success_rows(dnsmos_df)
-if len(dns_valid):
-    dns_summary = dns_valid.groupby("method").agg(dnsmos_samples=("sample_id", "size"), dnsmos_sig=("dnsmos_sig", "mean"), dnsmos_bak=("dnsmos_bak", "mean"), dnsmos_ovrl=("dnsmos_ovrl", "mean"))
-    comparison = comparison.join(dns_summary)
 asr_valid = common_success_rows(asr_df)
 if len(asr_valid):
     asr_summary = asr_valid.groupby("method").agg(asr_samples=("sample_id", "size"), word_edits=("word_edits", "sum"), reference_words=("reference_words", "sum"), char_edits=("char_edits", "sum"), reference_chars=("reference_chars", "sum"))
@@ -1241,17 +1182,16 @@ print("Kết quả khảo sát:", RUN_DIR)
 # - [Resemble Enhance](https://github.com/resemble-ai/resemble-enhance): khử nhiễu và phục hồi là hai chế độ riêng; phục hồi có thể đổi chi tiết giọng.
 # - [SGMSE](https://github.com/sp-uhh/sgmse): hai checkpoint 16 kHz khác nhau cho WSJ0-REVERB và VoiceBank-DEMAND.
 # - [SAM-Audio](https://github.com/facebookresearch/sam-audio): cần quyền tải weights, xuất target/residual; có thể giữ cả người nói nền.
-# - [DNSMOS](https://github.com/microsoft/DNS-Challenge/tree/master/DNSMOS): điểm dự đoán SIG/BAK/OVRL; không thay thế nghe và kiểm tra lời nói.
 #
 # Phiên bản gói và thông tin model của mỗi lần chạy được lưu ở `audio/<method>/method_info.json`.
 # Checkpoint download/cache có thể dùng nhiều dung lượng; nó không tương đương RAM/VRAM khi suy luận.
 
 # %% [markdown]
-# ## 11. Đóng gói kết quả để tải từ Kaggle Output
+# ## 10. Đóng gói kết quả để tải từ Kaggle Output
 #
 # ZIP chứa audio của từng sample/phương pháp, CSV/JSON, phiếu nghe, biểu đồ, cấu hình và log trong run.
 # Model/cache/môi trường không được đóng gói. Dùng Save Version/Save & Run All để giữ output của notebook.
-# Sau khi điền lại phiếu nghe, chạy lại mục 10 và cell này nếu muốn ZIP cập nhật theo điểm mới.
+# Sau khi điền lại phiếu nghe, chạy lại mục 9 và cell này nếu muốn ZIP cập nhật theo điểm mới.
 
 # %%
 EXPORT_RUN_ZIP = True

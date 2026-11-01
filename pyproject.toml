@@ -12,9 +12,11 @@ dependencies = []
 [project.optional-dependencies]
 asr = [
     "accelerate>=1.12.0",
+    "bert-score==0.3.13",
     "huggingface-hub>=0.34.0",
     "librosa>=0.11.0",
     "numpy>=2.0.0",
+    "pyvi==0.1.1",
     "qwen-asr==0.0.6",
     "soundfile>=0.13.0",
     "transformers==4.57.6",

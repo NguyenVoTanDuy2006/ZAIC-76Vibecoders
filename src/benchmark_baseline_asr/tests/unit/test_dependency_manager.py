@@ -9,7 +9,7 @@ from benchmark_baseline_asr.infrastructure.runtime.dependencies import ensure_as
 
 class ASRDependencyManagerTests(unittest.TestCase):
     def test_keeps_existing_pinned_runtime_without_running_pip(self):
-        installed = {"transformers": "4.57.6", "qwen-asr": "0.0.6"}
+        installed = {"transformers": "4.57.6", "qwen-asr": "0.0.6", "bert-score": "0.3.13", "pyvi": "0.1.1"}
 
         with (
             mock.patch("importlib.metadata.version", side_effect=installed.__getitem__),
@@ -30,7 +30,7 @@ class ASRDependencyManagerTests(unittest.TestCase):
 
         def install(command, check):
             self.assertTrue(check)
-            installed.update({"transformers": "4.57.6", "qwen-asr": "0.0.6"})
+            installed.update({"transformers": "4.57.6", "qwen-asr": "0.0.6", "bert-score": "0.3.13", "pyvi": "0.1.1"})
 
         with (
             mock.patch("importlib.metadata.version", side_effect=lookup),
@@ -44,10 +44,12 @@ class ASRDependencyManagerTests(unittest.TestCase):
         command = run.call_args.args[0]
         self.assertIn("transformers==4.57.6", command)
         self.assertIn("qwen-asr==0.0.6", command)
-        self.assertEqual(result, {"transformers": "4.57.6", "qwen-asr": "0.0.6"})
+        self.assertIn("bert-score==0.3.13", command)
+        self.assertIn("pyvi==0.1.1", command)
+        self.assertEqual(result, {"transformers": "4.57.6", "qwen-asr": "0.0.6", "bert-score": "0.3.13", "pyvi": "0.1.1"})
 
     def test_requests_kernel_restart_if_loaded_transformers_must_be_replaced(self):
-        installed = {"transformers": "5.0.0", "qwen-asr": "0.0.6"}
+        installed = {"transformers": "5.0.0", "qwen-asr": "0.0.6", "bert-score": "0.3.13", "pyvi": "0.1.1"}
 
         with (
             mock.patch("importlib.metadata.version", side_effect=installed.__getitem__),

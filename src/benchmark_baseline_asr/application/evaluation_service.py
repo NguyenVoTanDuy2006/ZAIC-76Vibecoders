@@ -14,6 +14,8 @@ def evaluate_predictions(
     prediction_path: str | Path,
     output_dir: str | Path,
     normalization_config: dict | None = None,
+    semantic_scorer=None,
+    semantic_config: dict | None = None,
 ) -> dict:
     manifest = {row["sample_id"]: row for row in read_jsonl(manifest_path)}
     predictions = {row["sample_id"]: row for row in read_jsonl(prediction_path)}
@@ -58,10 +60,29 @@ def evaluate_predictions(
         "inference_seconds_sum": inference_seconds,
         "rtf_sum_latency": inference_seconds / successful_audio if successful_audio else None,
     }
+    if semantic_scorer is not None:
+        semantic_config = semantic_config or {}
+        summary["semantic_model"] = semantic_config.get("model_id")
+        summary["semantic_model_revision"] = semantic_config.get("revision")
+        summary["semantic_score_method"] = "BERTScore F1 (PhoBERT, unrescaled, no IDF)"
+        summary["semantic_word_segmented"] = semantic_config.get("word_segment", True)
+        summary["semantic_model_parameter_count"] = semantic_scorer.model_parameter_count
+        for prefix, pair_key in (("raw", "raw_word"), ("normalized", "normalized_word")):
+            if not semantic_config.get(f"evaluate_{prefix}", True):
+                continue
+            values = semantic_scorer.score_pairs(pairs[pair_key])
+            for row, value in zip(per_sample, values):
+                row[f"{prefix}_bertscore_f1"] = value
+            summary[f"{prefix}_bertscore_f1"] = sum(values) / len(values) if values else None
     out = Path(output_dir)
     timing_path = out / "run_timing.json"
     if timing_path.is_file():
         timing = read_json(timing_path)
+        counts = {row.get("parameter_count") for row in timing.get("workers", [])}
+        counts.discard(None)
+        if len(counts) > 1:
+            raise ValueError(f"GPU workers reported different model parameter counts: {counts}")
+        summary["parameter_count"] = next(iter(counts)) if counts else None
         wall_seconds = timing.get("wall_seconds")
         summary["inference_wall_seconds"] = wall_seconds
         summary["rtf_wall"] = wall_seconds / successful_audio if wall_seconds and successful_audio else None

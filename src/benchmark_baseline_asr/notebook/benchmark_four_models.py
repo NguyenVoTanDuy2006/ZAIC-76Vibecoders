@@ -2,7 +2,7 @@
 # # Vietnamese ASR benchmark — Kaggle T4 ×2
 #
 # So sánh PhoWhisper-medium/large và Qwen3-ASR-0.6B/1.7B trên train split.
-# Notebook tạo transcript, tính CER/WER raw và normalized, đo tốc độ suy luận,
+# Notebook tạo transcript, tính CER/WER và PhoBERT BERTScore, đo số tham số và tốc độ suy luận,
 # rồi lưu kết quả vào `/kaggle/working/asr_benchmark/runs/<RUN_ID>/`.
 #
 # Trước khi chạy, attach dataset `zalo-ai`, chọn GPU T4 ×2 và thêm Kaggle Secret
@@ -284,18 +284,21 @@ def check_gpu_runtime() -> list[str]:
 
 
 def print_comparison(rows: list[dict[str, Any]]) -> None:
-    columns = ("model", "raw_cer", "raw_wer", "normalized_cer", "normalized_wer", "coverage", "rtf_wall")
-    print("\nFinal comparison (error rates and coverage are percentages):")
-    print(f"{'model':24} {'CER raw':>10} {'WER raw':>10} {'CER norm':>10} {'WER norm':>10} {'coverage':>10} {'RTF wall':>10} status")
+    error_columns = ("raw_cer", "raw_wer", "normalized_cer", "normalized_wer")
+    semantic_columns = ("raw_bertscore_f1", "normalized_bertscore_f1")
+    print("\nFinal comparison (error rates and coverage in %, BERTScore F1 on its native scale):")
+    print(f"{'model':24} {'params':>10} {'CER raw':>9} {'WER raw':>9} {'CER norm':>9} {'WER norm':>9} {'BERT raw':>9} {'BERT norm':>9} {'coverage':>9} {'RTF wall':>9} status")
     for row in rows:
-        values = []
-        for key in columns[1:-1]:
-            value = row.get(key)
-            values.append("n/a" if value is None else f"{100 * value:.2f}%")
+        values = [("n/a" if row.get(key) is None else f"{100 * row[key]:.2f}%") for key in error_columns]
+        values += [("n/a" if row.get(key) is None else f"{row[key]:.3f}") for key in semantic_columns]
+        coverage = row.get("coverage")
+        values.append("n/a" if coverage is None else f"{100 * coverage:.2f}%")
         rtf = row.get("rtf_wall")
         rtf_text = "n/a" if rtf is None else f"{rtf:.3f}"
+        params = row.get("parameter_count")
+        params_text = "n/a" if params is None else f"{params / 1e9:.3f}B"
         status = "complete" if row.get("result_complete") else "INCOMPLETE"
-        print(f"{row['model']:24} {values[0]:>10} {values[1]:>10} {values[2]:>10} {values[3]:>10} {values[4]:>10} {rtf_text:>10} {status}")
+        print(f"{row['model']:24} {params_text:>10} " + " ".join(f"{value:>9}" for value in values) + f" {rtf_text:>9} {status}")
 
 
 # %% [markdown]
@@ -359,7 +362,7 @@ def run_benchmark_notebook() -> Path:
 
     config_path, config_temp_dir = make_runtime_config()
     try:
-        print("Checking ASR runtime dependencies (Transformers 4.57.6, Qwen ASR 0.0.6)...")
+        print("Checking ASR and semantic metric dependencies...")
         asr_versions = ensure_asr_runtime()
         from benchmark_baseline_asr.infrastructure.secrets.kaggle_secrets import get_huggingface_token
         from benchmark_baseline_asr.workflow.compare import compare
@@ -393,7 +396,7 @@ def run_benchmark_notebook() -> Path:
         print("\n[4/6] Transcribing the full train split with all four models on the two GPUs...")
         transcribe(str(config_path), ENVIRONMENT, RUN_ID)
 
-        print("\n[5/6] Calculating raw and normalized CER/WER...")
+        print("\n[5/6] Calculating CER/WER and PhoBERT BERTScore...")
         evaluate(str(config_path), RUN_ID, ENVIRONMENT)
 
         print("\n[6/6] Comparing model metrics and writing reports...")

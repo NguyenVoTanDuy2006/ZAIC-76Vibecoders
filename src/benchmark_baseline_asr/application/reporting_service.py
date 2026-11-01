@@ -29,7 +29,8 @@ def _write_csv(path: Path, rows: list[dict]) -> None:
 
 
 def _write_markdown(path: Path, rows: list[dict]) -> None:
-    columns = ["model", "raw_cer", "raw_wer", "normalized_cer", "normalized_wer", "coverage", "rtf_sum_latency"]
+    columns = ["model", "parameter_count", "raw_cer", "raw_wer", "normalized_cer", "normalized_wer",
+               "raw_bertscore_f1", "normalized_bertscore_f1", "coverage", "rtf_sum_latency"]
     lines = ["| " + " | ".join(columns) + " |", "|" + "|".join(["---"] * len(columns)) + "|"]
     for row in rows:
         lines.append("| " + " | ".join(str(row.get(column, "")) for column in columns) + " |")

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from benchmark_baseline_asr.application.audio_service import prepare_audio
 from benchmark_baseline_asr.infrastructure.models.factory import create_adapter
+from benchmark_baseline_asr.infrastructure.models.parameter_count import count_model_parameters
 from benchmark_baseline_asr.infrastructure.runtime.reproducibility import configure_determinism
 from benchmark_baseline_asr.infrastructure.runtime.timing import synchronize_device, timed_call
 from benchmark_baseline_asr.infrastructure.storage.artifacts import append_jsonl, read_jsonl, write_json
@@ -27,6 +28,7 @@ def run_worker(spec_path: str | Path) -> int:
     try:
         load_start = time.perf_counter()
         adapter.load(spec["model_path"], spec["model"], runtime)
+        parameter_count = count_model_parameters(adapter)
         synchronize_device(runtime["device"])
         load_seconds = time.perf_counter() - load_start
         existing = {row["sample_id"] for row in read_jsonl(output_path)}
@@ -62,6 +64,7 @@ def run_worker(spec_path: str | Path) -> int:
                 failed += 1
         elapsed = time.perf_counter() - wall_start
         write_json(summary_path, {"worker_id": spec["worker_id"], "gpu_id": spec["gpu_id"],
+                                  "parameter_count": parameter_count,
                                   "expected": len(spec["samples"]), "resumed": len(spec["samples"]) - len(pending),
                                   "succeeded": succeeded, "failed": failed, "model_load_seconds": load_seconds,
                                   "warmup_seconds": warmup_seconds, "elapsed_seconds": elapsed})
