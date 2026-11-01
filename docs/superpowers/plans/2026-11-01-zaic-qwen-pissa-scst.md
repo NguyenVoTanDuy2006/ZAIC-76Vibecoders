@@ -4,7 +4,7 @@
 
 **Goal:** Modular fine-tuning of original Qwen3-ASR-1.7B-hf using PiSSA and `CE + 0.1 * SCST`, on Kaggle T4 x2, for five mixed epochs.
 
-**Architecture:** Self-contained package `zaic_pissa` inside the requested `src/fine-tuning_with_zaic_data`. Separate configuration, data, model/PiSSA lifecycle, reward, objectives, distributed runtime, training, evaluation and checkpoints. Thin CLI and Kaggle percent script. Port relevant Research code without importing Research at runtime.
+**Architecture:** Self-contained package `zaic_pissa` inside the requested `src/asr_finetuning`. Separate configuration, data, model/PiSSA lifecycle, reward, objectives, distributed runtime, training, evaluation and checkpoints. Thin CLI and Kaggle percent script. Port relevant Research code without importing Research at runtime.
 
 ## Approved specification
 

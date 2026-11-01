@@ -1,7 +1,7 @@
 [project]
-name = "zalo-ai-challenge"
+name = "lifemate"
 version = "0.1.0"
-description = "Add your description here"
+description = "ASR benchmarking, ASR fine-tuning, and a tool-using agent for LifeMate"
 readme = "README.md"
 authors = [
     { name = "Nguyen Vo Tan Duy", email = "nguyenvotanduy2006@gmail.com" }
@@ -23,12 +23,12 @@ asr = [
 ]
 
 [project.scripts]
-zalo-ai-challenge = "zalo_ai_challenge:main"
-asr-benchmark = "benchmark_baseline_asr.interfaces.cli:main"
+lifemate-agent = "lifemate.agent:main"
+asr-benchmark = "asr_benchmark.interfaces.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.12.8,<0.13.0"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
-module-name = ["zalo_ai_challenge", "benchmark_baseline_asr"]
+module-name = ["asr_benchmark", "lifemate"]
