@@ -40,6 +40,7 @@ def checked(command, **kwargs):
 def resolve_source():
     if SOURCE_ROOT:
         source = Path(SOURCE_ROOT)
+        source_revision = "local SOURCE_ROOT"
     else:
         repo = TEMP / "repository"
         if not (repo / ".git").exists():
@@ -66,15 +67,37 @@ def resolve_source():
         checked(["git", "-C", repo, "fetch", "--depth", "1", "origin", SOURCE_REF])
         checked(["git", "-C", repo, "checkout", "--detach", "FETCH_HEAD"])
         source = repo / "src/asr_finetuning"
-        print(
-            "Source commit:",
-            subprocess.check_output(
-                ["git", "-C", repo, "rev-parse", "HEAD"], text=True
-            ).strip(),
+        source_revision = subprocess.check_output(
+            ["git", "-C", repo, "rev-parse", "HEAD"], text=True
+        ).strip()
+        print("Source commit:", source_revision)
+
+    package_init = source / "zaic_pissa" / "__init__.py"
+    if not package_init.is_file() and not SOURCE_ROOT:
+        # Some Kaggle Git runtimes may leave sparse paths marked skipped after
+        # checkout; explicitly materialize this subtree from the fetched commit.
+        checked(
+            [
+                "git",
+                "-C",
+                repo,
+                "checkout",
+                "--ignore-skip-worktree-bits",
+                "FETCH_HEAD",
+                "--",
+                "src/asr_finetuning",
+            ]
         )
-    if not (source / "zaic_pissa/__init__.py").is_file():
+    if not package_init.is_file():
+        entries = (
+            sorted(path.name for path in source.iterdir())
+            if source.is_dir()
+            else []
+        )
         raise FileNotFoundError(
-            "Source chưa có module mới. Hãy push code lên SOURCE_REF rồi chạy lại notebook."
+            f"Thiếu module fine-tuning: {package_init}; source={source}; "
+            f"revision={source_revision}; entries={entries}. "
+            "Kiểm tra SOURCE_ROOT hoặc SOURCE_REF và chạy lại cell nạp source."
         )
     target = TEMP / "source"
     if source.resolve() != target.resolve():
