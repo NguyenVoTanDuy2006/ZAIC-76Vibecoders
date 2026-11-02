@@ -90,7 +90,7 @@ class DataConfigTests(unittest.TestCase):
         from zaic_pissa.config import load_config
 
         c = load_config()
-        self.assertEqual((c["train"]["epochs"], c["scst"]["weight"]), (5, 0.1))
+        self.assertEqual((c["train"]["epochs"], c["scst"]["weight"]), (3, 0.1))
         self.assertEqual(
             c["model"]["revision"], "bcd2b5b7f32b480ab5790554cfa8347f246a14f3"
         )
