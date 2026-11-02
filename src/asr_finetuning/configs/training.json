@@ -1,7 +1,7 @@
 {
-  "train": {"epochs": 5, "world_size": 2, "batch_size": 1, "gradient_accumulation_steps": 8, "learning_rate": 0.00005, "weight_decay": 0.01, "betas": [0.9, 0.999], "eps": 1e-8, "warmup_ratio": 0.03, "gradient_clip_norm": 1.0, "precision": "fp16", "gradient_checkpointing": true, "num_workers": 2, "seed": 1234},
+  "train": {"epochs": 3, "world_size": 2, "batch_size": 1, "gradient_accumulation_steps": 8, "learning_rate": 0.00005, "weight_decay": 0.01, "betas": [0.9, 0.999], "eps": 1e-8, "warmup_ratio": 0.03, "gradient_clip_norm": 1.0, "precision": "fp16", "gradient_checkpointing": true, "num_workers": 2, "seed": 1234},
   "scst": {"weight": 0.1, "temperature": 1.0, "top_p": 1.0, "top_k": 0},
   "decode": {"language": "Vietnamese", "max_new_tokens": 768, "num_beams": 1, "do_sample": false},
   "runtime": {"cache_dir": "/kaggle/temp/zaic-qwen-pissa/models", "device": "cuda", "cpu_threads": 2, "local_files_only": false},
-  "output": {"root": "/kaggle/working/zaic-qwen-pissa", "run_id": "zaic-pissa-scst-v1"}
+  "output": {"root": "/kaggle/working/zaic-qwen-pissa", "run_id": "zaic-pissa-scst-3epoch"}
 }

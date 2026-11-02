@@ -19,8 +19,8 @@ SOURCE_REPOSITORY = "https://github.com/NguyenVoTanDuy2006/ZAIC-76Vibecoders.git
 SOURCE_REF = (
     "agent"  # Nên thay bằng commit đã kiểm thử khi dùng GitHub
 )
-RESUME_BUNDLE = None  # /kaggle/input/previous-run/zaic-pissa-scst-v1-resume.zip
-RUN_ID = "zaic-pissa-scst-v1"  # Đổi tên khi đổi cấu hình/dữ liệu
+RESUME_BUNDLE = None  # /kaggle/input/previous-run/zaic-pissa-scst-3epoch-resume.zip
+RUN_ID = "zaic-pissa-scst-3epoch"  # Run mới; không resume checkpoint 5 epoch
 RUN_SMOKE = True
 TEMP = Path("/kaggle/temp/zaic-qwen-pissa")
 WORKING = Path("/kaggle/working/zaic-qwen-pissa")
@@ -130,7 +130,7 @@ checked(
 # %% [markdown]
 # ## Cấu hình và split cố định theo conversation
 # Giữ nguyên audio/transcript. Bao gồm user audio trong history, không lấy assistant/tool làm target.
-# Input chỉ đọc; kết quả lưu dưới /kaggle/working. Test chỉ chạy sau khi hoàn tất 5 epoch.
+# Input chỉ đọc; kết quả lưu dưới /kaggle/working. Test chỉ chạy sau khi hoàn tất 3 epoch.
 
 # %%
 dataset = find_dataset(override=DATA_ROOT)
@@ -181,7 +181,7 @@ if RUN_SMOKE:
     cli("smoke", distributed=True)
 
 # %% [markdown]
-# ## 5 epoch CE + 0.1 SCST
+# ## 3 epoch CE + 0.1 SCST
 # Lần đầu chấm base validation trước khi gắn PiSSA. Mỗi epoch chấm validation all/latest.
 # Chọn best bằng normalized PhoBERT F1 trên latest; tie-break WER, CER, epoch sớm hơn.
 # Khi session ngắt giữa epoch, resume từ epoch hoàn tất gần nhất, cùng world size.
