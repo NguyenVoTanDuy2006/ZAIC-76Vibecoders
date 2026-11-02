@@ -6,7 +6,7 @@ Module độc lập, chạy **Kaggle T4 ×2**, bắt đầu từ Qwen gốc, kh�
 
 1. Push thư mục này lên branch `agent` của GitHub.
 2. Import `notebook/train_qwen_pissa_scst_kaggle.py` vào Kaggle, chọn **T4 ×2**, bật Internet và gắn dataset ZAIC chứa `train.jsonl` cùng `audio/`. Notebook clone branch GitHub vào `/kaggle/temp/zaic-qwen-pissa/repository`, lấy riêng thư mục fine-tuning, rồi cài và chạy từ bản clone đó. Nếu có nhiều dataset train, đặt `DATA_ROOT` ở cell đầu. Thêm **Kaggle Secret `HF_TOKEN`** nếu cần; token không được lưu vào file output.
-3. Run All: cài bằng **pip** vào Python 3.12 riêng → chuẩn bị manifest → smoke hai GPU → base validation → train 3 epoch → test base/best → ZIP kết quả.
+3. Run All: cài bằng **pip** vào Python 3.12 riêng → chuẩn bị manifest → smoke hai GPU → base validation → train 5 epoch → test base/best → ZIP kết quả.
 
 Kernel Kaggle có thể là Python 3.13; subprocess chạy Python 3.12 riêng. Nếu máy không có Python 3.12, bootstrap dùng [pbs-installer](https://github.com/frostming/pbs-installer). Torch 2.6.0/cu124, Transformers 5.17.0, PEFT 0.21.1 và scorer được pin trong `requirements.txt`. Không cài `qwen-asr` SDK vì stack này dùng native Qwen trong Transformers 5. Venv đã tồn tại nhưng thiếu pip được sửa bằng `ensurepip`, sau đó host pip `--python` nếu cần.
 
@@ -18,7 +18,7 @@ Source, venv và cache model nằm trong `/kaggle/temp/zaic-qwen-pissa`; input �
 |---|---|
 | Base | `Qwen/Qwen3-ASR-1.7B-hf` @ `bcd2b5b7f32b480ab5790554cfa8347f246a14f3` |
 | PiSSA | r=8, alpha=16, dropout=0, bias=none, `pissa_niter_4`; q/v encoder + decoder |
-| Train | 3 epoch, AdamW 5e-5, decay .01, linear schedule, warmup 3%, clip 1 |
+| Train | 5 epoch, AdamW 5e-5, decay .01, linear schedule, warmup 3%, clip 1 |
 | Batch | 1/GPU × 2 GPU × accumulation 8 = 16; nhóm cuối dùng đúng số microbatch còn lại |
 | Precision | FP16 autocast + scaler, non-reentrant gradient checkpointing |
 | Seed | 1234; PiSSA initialization chung seed cho hai rank, giữ RNG của lượt train |
@@ -53,7 +53,7 @@ Split theo conversation: sort ID → shuffle Python Random(1234) → test ceil(1
 
 Conversation/PCM không chồng giữa split; không khẳng định speaker-disjoint vì dataset không cung cấp speaker ID. Train dùng DistributedSampler có padding để hai rank cùng số backward; padding được ghi rõ trong log. Validation/test chia strided không padding, kiểm tra đủ ID và không trùng.
 
-Chấm base validation **trước khi gắn PiSSA**. Mỗi epoch chấm latest và all: raw/normalized WER, CER theo tổng edit counts toàn corpus, CER gồm khoảng trắng, mean BERTScore F1, coverage, truncation trong predictions, latency/RTF. Best lấy **normalized PhoBERT F1 trên validation latest**; tie trong 1e-6 lấy normalized WER thấp hơn, CER thấp hơn, rồi epoch sớm hơn. Không early stopping. Test chỉ chạy khi đủ 3 epoch, dùng base gốc và best adapter nạp mới, cùng inference/scorer; test không chọn checkpoint.
+Chấm base validation **trước khi gắn PiSSA**. Mỗi epoch chấm latest và all: raw/normalized WER, CER theo tổng edit counts toàn corpus, CER gồm khoảng trắng, mean BERTScore F1, coverage, truncation trong predictions, latency/RTF. Best lấy **normalized PhoBERT F1 trên validation latest**; tie trong 1e-6 lấy normalized WER thấp hơn, CER thấp hơn, rồi epoch sớm hơn. Không early stopping. Test chỉ chạy khi đủ 5 epoch, dùng base gốc và best adapter nạp mới, cùng inference/scorer; test không chọn checkpoint.
 
 ## Output và resume
 
@@ -62,9 +62,9 @@ Chấm base validation **trước khi gắn PiSSA**. Mỗi epoch chấm latest v
   config.json, provenance.json, dataset.json
   manifests/{train,validation,test}.jsonl
   pissa_initial/                  # factors ban đầu, phục vụ conversion
-  adapters/epoch-01..03/          # LoRA rank 16, nạp trên original base
+  adapters/epoch-01..05/          # LoRA rank 16, nạp trên original base
   best_adapter/, best_model.json, best.json
-  validation/{base,epoch-01..03}/{predictions.jsonl,summary.json}
+  validation/{base,epoch-01..05}/{predictions.jsonl,summary.json}
   test/{base,best}/, test/comparison.json
   history.json
   checkpoints/latest.pt          # chỉ giữ native state mới nhất
