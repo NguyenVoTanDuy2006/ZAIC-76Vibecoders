@@ -100,6 +100,7 @@ class ModelLoadConfig:
     model_source: str = "Qwen/Qwen3-4B-Instruct-2507"
     device: str = "cuda:0"
     local_files_only: bool = True
+    revision: str | None = None
 
     def __post_init__(self):
         if not isinstance(self.model_source, str) or not self.model_source.strip():
@@ -437,9 +438,11 @@ def load_qwen_backend(model_config=None, agent_config=None):
     if not torch.cuda.is_available() or gpu_index >= torch.cuda.device_count():
         raise RuntimeError(f"Không có GPU {model_config.device}; cần CUDA để nạp bản Qwen FP16 này")
     tokenizer = AutoTokenizer.from_pretrained(
-        model_config.model_source, local_files_only=model_config.local_files_only)
+        model_config.model_source, local_files_only=model_config.local_files_only,
+        revision=model_config.revision)
     model = AutoModelForCausalLM.from_pretrained(
         model_config.model_source, local_files_only=model_config.local_files_only,
+        revision=model_config.revision,
         dtype=torch.float16, device_map={"": gpu_index}, attn_implementation="sdpa")
     model.eval()
     if not hasattr(model.generation_config, "prefill_chunk_size"):
@@ -719,13 +722,11 @@ def load_toolenv(data_root, split):
     validate(name, arguments), call(name, arguments), get_tool_calls(),
     get_state_hash(). Không gọi get_state(), không mở *_environment trực tiếp.
     """
-    # TODO: nhóm trưởng kiểm tra đường dẫn/thư viện BTC rồi bỏ comment mẫu này,
-    # đồng thời xóa dòng raise. get_tool_env_factory đã kiểm tra đúng split.
-    # ToolEnv = get_tool_env_factory(data_root, split)
-    # def make_env(sample_id):
-    #     return ToolEnv(split, sample_id, root=data_root)
-    # return make_env
-    raise NotImplementedError("load_toolenv() để nối ToolEnv")
+    # Hook tích hợp vẫn hiển thị tại đây để nhóm trưởng cấu hình khi cần.
+    ToolEnv = get_tool_env_factory(data_root, split)
+    def make_env(sample_id):
+        return ToolEnv(split, sample_id, root=data_root)
+    return make_env
 
 
 def prepare_audio_input(item, data_root, split):

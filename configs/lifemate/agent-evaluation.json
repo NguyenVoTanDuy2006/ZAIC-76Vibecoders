@@ -1,0 +1,18 @@
+{
+  "model_source": "Qwen/Qwen3-4B-Instruct-2507",
+  "model_revision": null,
+  "weights_fingerprint": null,
+  "quantization": "fp16",
+  "device": "cuda:0",
+  "prompt_sha256": "11f3365885dc7d155a7f4fc38b9d20c3db85a2c39677cff00139f42a8a3a62ba",
+  "generation": {
+    "max_steps": 12,
+    "max_calls": 12,
+    "max_invalid_replies": 2,
+    "max_context_tokens": 16384,
+    "max_new_tokens": 256,
+    "prefill_chunk_size": 512,
+    "max_seconds": null,
+    "check_reference_provenance": true
+  }
+}

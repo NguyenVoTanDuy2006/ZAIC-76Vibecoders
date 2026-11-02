@@ -7,7 +7,7 @@ ASR và agent bàn giao qua file, có thể chạy bằng hai môi trường Pyt
 Nếu đã có adapter ASR được huấn luyện, bạn chạy nhận dạng trực tiếp; không cần
 huấn luyện lại để tạo prediction.
 Phần nối đã có test; suy luận ASR/Qwen thật trên GPU chưa được xác minh.
-`load_toolenv()` vẫn là chỗ nhóm trưởng điền trước khi chạy đầy đủ.
+`load_toolenv()` đã nối runtime BTC của đúng split và vẫn là hook để nhóm trưởng cấu hình.
 
 | Bạn muốn làm gì? | Mở file nào? |
 |---|---|
@@ -15,6 +15,7 @@ Phần nối đã có test; suy luận ASR/Qwen thật trên GPU chưa được 
 | Chạy agent từ text ASR | [notebooks/lifemate/run_agent.ipynb](notebooks/lifemate/run_agent.ipynb) |
 | Sửa hướng dẫn cho model, quyết định gọi công cụ, vòng lặp hoặc nối ToolEnv | [src/lifemate/agent.py](src/lifemate/agent.py) |
 | Hiểu từng hàm, định dạng và cách bàn giao | [docs/lifemate/README.md](docs/lifemate/README.md) |
+| Validate/evaluate agent, chia dev/test và xem lỗi tool/arguments/state | [docs/lifemate/agent-evaluation.md](docs/lifemate/agent-evaluation.md) |
 
 ### Cấu trúc repo
 
@@ -149,15 +150,14 @@ assistant. Không có lượt user trong lịch sử thì dùng `history_user_te
 
 Nếu đã có file ASR hoàn chỉnh cho đúng split, có thể bắt đầu từ bước tiếp theo.
 
-### Bước 4 — Nhóm trưởng nối ToolEnv
+### Bước 4 — Kiểm tra đường dẫn ToolEnv
 
-Mở [src/lifemate/agent.py](src/lifemate/agent.py), điền `load_toolenv()` theo đoạn
-mẫu đã comment: nạp thư viện BTC của đúng split, trả về hàm tạo ToolEnv theo ID.
+Trong [src/lifemate/agent.py](src/lifemate/agent.py), `load_toolenv()` đã nạp
+thư viện BTC của đúng split và trả về hàm tạo ToolEnv theo ID.
 Runner chỉ tạo một môi trường cho mỗi mẫu; các hành động trong history đã được
 môi trường khởi tạo sẵn, không gọi lại.
 
-**Hiện hàm này vẫn chừa trống.** Nếu chưa điền, bước chạy agent sẽ dừng bằng
-`NotImplementedError`, trước khi nạp Qwen. Không đọc trực tiếp `*_environment`
+Kiểm tra `DATA_ROOT/<split>/zaic_tools` tồn tại. Không đọc trực tiếp `*_environment`
 hay `state.json` để thay cho API công cụ.
 
 ### Bước 5 — Chạy notebook agent

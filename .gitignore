@@ -10,3 +10,5 @@ wheels/
 .venv
 data/
 artifacts/
+output/lifemate/
+.test-scratch/

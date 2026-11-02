@@ -308,9 +308,15 @@ class AgentHandoffTests(unittest.TestCase):
                     agent.run_full_pipeline(root, asr_predictions_path=root / "missing.jsonl", toolenv_loader=toolenv)
             qwen.assert_not_called(); toolenv.assert_not_called()
 
-    def test_toolenv_is_still_an_explicit_leader_placeholder(self):
-        with self.assertRaises(NotImplementedError):
-            load_agent_module().load_toolenv("unused", "train")
+    def test_toolenv_hook_defers_creation_and_uses_the_selected_physical_split(self):
+        agent = load_agent_module()
+        factory = Mock(return_value=object())
+        with patch.object(agent, "get_tool_env_factory", return_value=factory):
+            make_env = agent.load_toolenv("dataset", "train")
+        factory.assert_not_called()
+        result = make_env("sample")
+        factory.assert_called_once_with("train", "sample", root="dataset")
+        self.assertIs(result, factory.return_value)
 
     @unittest.skipUnless(os.environ.get("LIFEMATE_DATA_ROOT"), "Set LIFEMATE_DATA_ROOT for optional official-runtime check")
     def test_prediction_file_to_official_toolenv_with_scripted_llm(self):

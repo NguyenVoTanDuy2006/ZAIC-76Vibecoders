@@ -3,8 +3,8 @@
 Nhánh làm việc: `agent`. Phần này nối ASR có sẵn của đội với notebook
 `notebooks/lifemate/run_agent.ipynb`. Code xử lý nằm trong `src/lifemate/`,
 notebook chỉ cấu hình và gọi module. ASR nhận audio và trả text; agent nhận text, context,
-history và schema tools để quyết định hành động. Chỗ tạo ToolEnv vẫn được chừa
-trong `src/lifemate/agent.py::load_toolenv()` để nhóm trưởng nối thư viện BTC.
+history và schema tools để quyết định hành động. `src/lifemate/agent.py::load_toolenv()`
+đã nối thư viện BTC đúng split và vẫn là hook để nhóm trưởng cấu hình.
 
 ## 1. File nào làm gì?
 
@@ -173,8 +173,7 @@ ASR. `MODEL_SOURCE` cần là model ID đã cache hoặc thư mục Qwen/tokeniz
 Kết quả agent được lưu trong `<repo>/output/lifemate/agent/<run_id>` hoặc
 `/kaggle/working/lifemate/agent/<run_id>`. Qwen ở đây là **LLM agent 4B**, khác base **ASR 1.7B** của bước trước.
 
-Nhóm trưởng điền `load_toolenv()` theo đoạn mẫu được comment trong
-`src/lifemate/agent.py`:
+`load_toolenv()` trong `src/lifemate/agent.py` đã
 import đúng `zaic_tools` của split và trả hàm `make_env(id)`. Runner chỉ tạo một
 env cho mỗi mẫu. Không đọc trực tiếp `*_environment` hoặc gọi `get_state()`.
 
@@ -203,6 +202,10 @@ nhiệm vụ đúng. Trace và prediction ASR là file nội bộ; submission ch
 BTC yêu cầu và giữ mọi call đã thực thi, kể cả call bị runtime từ chối.
 
 ## 5. Kiểm tra và giới hạn
+
+Bộ validate/evaluate **agents** nằm ở `src/lifemate/evaluation/`.
+Xem [hướng dẫn chia split, chạy và chấm agents](agent-evaluation.md).
+Validation nằm sau agent → ToolEnv; phần này không viết thêm validate/evaluate ASR.
 
 Từ repo root, đặt `PYTHONPATH=src` và chạy:
 
