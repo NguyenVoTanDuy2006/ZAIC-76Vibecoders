@@ -1,7 +1,7 @@
 # Benchmark Qwen ASR 1.7B PiSSA / AdaLoRA trên Zalo train
 
 Hai model Kaggle được đọc từ `configs/models/qwen_vimd_pissa_full.json`
-và `qwen_vimd_adalora_full.json` trong package `asr_benchmark`,
+và `qwen_vimd_adalora_full.json` trong package `asr.benchmark`,
 giữ nguyên cấu trúc config Research: `model.key`, `backend`, `model_id`,
 `revision`, `adapter_path`, `display_name`, `dtype`, `trust_remote_code`.
 PiSSA đã chuyển thành LoRA trên base gốc; AdaLoRA giữ `rank_pattern` đã học.
@@ -10,7 +10,7 @@ Cả hai dùng `Qwen/Qwen3-ASR-1.7B-hf`, revision
 
 ## Kaggle — bản chạy cho thí nghiệm này
 
-Import script `output/jupyter-notebook/benchmark-qwen-full-adapters-kaggle.py`
+Import script `src/asr/notebooks/benchmark/benchmark-qwen-full-adapters-kaggle.py`
 vào Kaggle. Bản Kaggle dùng `.py` với các cell `# %%`, cài bằng pip.
 
 1. Add Input dataset Zalo chứa `train.jsonl` và `audio/`.
@@ -56,7 +56,7 @@ python3 -m venv /tmp/qwen-adapter-benchmark
 /tmp/qwen-adapter-benchmark/bin/python -m pip install -r requirements/qwen-adapter-benchmark.txt
 ```
 
-Notebook local: `output/jupyter-notebook/benchmark-qwen-full-adapters-local.ipynb`.
+Notebook local: `src/asr/notebooks/benchmark/benchmark-qwen-full-adapters-local.ipynb`.
 Chọn GPU IDs hiện có trong cell cấu hình. Hai adapter chạy lần lượt để giải
 phóng VRAM giữa các model; mỗi model chia manifest theo tổng thời lượng lên
 số GPU được cấu hình. Một GPU là mặc định, hai GPU cũng được hỗ trợ.
@@ -67,9 +67,9 @@ Từ thư mục gốc repository, trên máy có các Kaggle Models đã mount, 
 bằng config JSON:
 
 ```bash
-PYTHONPATH=src python -m asr_benchmark.workflow.benchmark_qwen_adapters \
-  --model-configs src/asr_benchmark/configs/models/qwen_vimd_pissa_full.json \
-                  src/asr_benchmark/configs/models/qwen_vimd_adalora_full.json \
+PYTHONPATH=src python -m asr.benchmark.workflow.benchmark_qwen_adapters \
+  --model-configs src/asr/benchmark/configs/models/qwen_vimd_pissa_full.json \
+                  src/asr/benchmark/configs/models/qwen_vimd_adalora_full.json \
   --dataset-root /kaggle/input/your-dataset/train \
   --run-id qwen-full-train-config-v1 --prepare-only
 ```
@@ -78,7 +78,7 @@ Chế độ local cũ vẫn chọn `epoch_<best_epoch>_adapter` từ hai thư m�
 chứa `best_epoch.txt` và metadata run:
 
 ```bash
-PYTHONPATH=src /tmp/qwen-adapter-benchmark/bin/python -m asr_benchmark.workflow.benchmark_qwen_adapters \
+PYTHONPATH=src /tmp/qwen-adapter-benchmark/bin/python -m asr.benchmark.workflow.benchmark_qwen_adapters \
   --models-root /run/media/fernir/Data/Documents/HCMUS/Research/models \
   --run-id qwen-full-train-v1 --prepare-only
 ```
@@ -117,8 +117,8 @@ diễn giải WER thấp trên một phần mẫu thành kết quả toàn bộ 
 ## Kiểm thử
 
 ```bash
-PYTHONPATH=src python -m unittest discover -s src/asr_benchmark/tests/unit -p 'test_*.py' -q
-PYTHONPATH=src python -m unittest discover -s src/asr_benchmark/tests/integration -p 'test_qwen_hf_peft.py' -v
+PYTHONPATH=src python -m unittest discover -s src/asr/tests/benchmark/unit -p 'test_*.py' -q
+PYTHONPATH=src python -m unittest discover -s src/asr/tests/benchmark/integration -p 'test_qwen_hf_peft.py' -v
 ```
 
 Integration test cần môi trường Transformers 5 / PEFT; dùng processor offline

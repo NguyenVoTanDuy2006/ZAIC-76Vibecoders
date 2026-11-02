@@ -24,11 +24,11 @@ asr = [
 
 [project.scripts]
 lifemate-agent = "lifemate.agent:main"
-asr-benchmark = "asr_benchmark.interfaces.cli:main"
+asr-benchmark = "asr.benchmark.interfaces.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.12.8,<0.13.0"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
-module-name = ["asr_benchmark", "lifemate"]
+module-name = ["asr", "lifemate"]

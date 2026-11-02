@@ -11,10 +11,11 @@ Phần nối đã có test; suy luận ASR/Qwen thật trên GPU chưa được 
 
 | Bạn muốn làm gì? | Mở file nào? |
 |---|---|
-| Sinh văn bản cho yêu cầu hiện tại và các lượt người dùng trong lịch sử | [notebooks/lifemate/predict_asr.py](notebooks/lifemate/predict_asr.py) |
+| Sinh văn bản cho yêu cầu hiện tại và các lượt người dùng trong lịch sử | [src/asr/notebooks/integration/predict_asr.py](src/asr/notebooks/integration/predict_asr.py) |
 | Chạy agent từ text ASR | [notebooks/lifemate/run_agent.ipynb](notebooks/lifemate/run_agent.ipynb) |
 | Sửa hướng dẫn cho model, quyết định gọi công cụ, vòng lặp hoặc nối ToolEnv | [src/lifemate/agent.py](src/lifemate/agent.py) |
 | Hiểu từng hàm, định dạng và cách bàn giao | [docs/lifemate/README.md](docs/lifemate/README.md) |
+| Xem cấu trúc ASR và các lệnh kiểm thử | [src/asr/README.md](src/asr/README.md) |
 
 ### Cấu trúc repo
 
@@ -24,25 +25,24 @@ ZAIC-76Vibecoders/
 ├── pyproject.toml                     # Khai báo gói Python và thư viện phụ thuộc
 ├── notebooks/
 │   └── lifemate/
-│       ├── predict_asr.py             # Bước 1: chạy ASR; chia cell bằng # %% cho Kaggle
-│       └── run_agent.ipynb            # Bước 2: cấu hình và gọi agent; không sao chép mã xử lý
+│       └── run_agent.ipynb            # Bước 2: cấu hình và gọi agent
 ├── src/
-│   ├── lifemate/                      # Mã tích hợp ASR → agent
-│   │   ├── agent.py                   # Nạp Qwen, tạo đầu vào, chọn/gọi công cụ, xuất kết quả
-│   │   ├── paths.py                   # Đường dẫn chung cho cả hai bước
-│   │   └── asr/
-│   │       ├── predict.py             # Dùng ASR có sẵn; lưu bộ nhớ đệm và xuất file
-│   │       └── predictions.py         # Ghép yêu cầu/lịch sử, kiểm tra định dạng, đọc file
-│   ├── asr_benchmark/                 # Đánh giá, so sánh model ASR và các adapter
-│   └── asr_finetuning/                # Huấn luyện ASR PiSSA + CE/SCST
+│   ├── asr/
+│   │   ├── common/                    # Chuẩn hóa text, edit counts, lượt audio dùng chung
+│   │   ├── benchmark/                 # Đánh giá model ASR và adapter
+│   │   ├── finetuning/                # Huấn luyện PiSSA + CE/SCST
+│   │   ├── integration/               # Prediction ASR cho LifeMate
+│   │   ├── notebooks/                 # Notebook local (.ipynb) và Kaggle (# %% .py)
+│   │   └── tests/                     # Test benchmark và fine-tuning
+│   └── lifemate/                      # Agent, ToolEnv và đường dẫn bàn giao
+│       ├── agent.py
+│       └── paths.py
 ├── tests/
 │   └── lifemate/                      # Kiểm thử định dạng, luồng tích hợp và đường dẫn chạy
 ├── docs/
 │   └── lifemate/README.md             # Luồng xử lý và bảng chức năng chi tiết
 ├── requirements/                      # Thư viện cho môi trường ASR và đánh giá adapter
-├── benchmark-base-asr-model.ipynb     # Notebook benchmark ASR ban đầu của đội
 └── output/
-    ├── jupyter-notebook/              # Các notebook khảo sát/benchmark adapter cũ
     └── lifemate/                      # Kết quả LifeMate sinh khi chạy
         ├── asr/<split>/
         │   ├── asr_predictions.jsonl  # Văn bản ASR hoàn chỉnh đưa cho agent
@@ -64,12 +64,13 @@ flowchart TD
     F --> G["Ghi kết quả JSONL và nhật ký riêng"]
 ```
 
-Ba nhóm code có tên theo chức năng: `asr_benchmark` để đánh giá model,
-`asr_finetuning` để huấn luyện, `lifemate` để nối ASR với agent. Gói mẫu đã xóa
+Các phần ASR nằm trong `src/asr/`: `asr.benchmark` để đánh giá model,
+`asr.finetuning` để huấn luyện, `asr.integration` để tạo prediction cho agent,
+và `asr.common` cho logic dùng chung. `lifemate` chạy agent. Gói mẫu đã xóa
 không còn trong cấu hình cài đặt hoặc danh sách lệnh chạy. Sau khi cài dự án,
 lệnh `lifemate-agent` gọi chương trình điều phối agent; `asr-benchmark` chạy
 phần đánh giá ASR.
-Trong `asr_finetuning/`, `zaic_pissa/` là gói huấn luyện PiSSA độc lập,
+Trong `asr/finetuning/` là gói huấn luyện PiSSA độc lập,
 dùng môi trường Python riêng như hướng dẫn của phần huấn luyện.
 
 ### Bước 1 — Chuẩn bị mã nguồn, dữ liệu và trọng số
@@ -78,11 +79,11 @@ Chuẩn bị ba phần:
 
 | Thành phần | Yêu cầu |
 |---|---|
-| Mã nguồn | Toàn bộ bản mới của repo, có `src/lifemate/` và `src/asr_benchmark/`. Notebook agent cần các module này để import. |
+| Mã nguồn | Toàn bộ bản mới của repo, có `src/lifemate/` và `src/asr/benchmark/`. Notebook agent cần các module này để import. |
 | Dữ liệu | `DATA_ROOT` trỏ tới thư mục chứa `train/`, `public_test/` và các file/audio bên trong. |
 | Trọng số | Base ASR 1.7B, adapter PiSSA đã huấn luyện, và model/tokenizer Qwen agent 4B. |
 
-Các script lấy mã nguồn hiện tại từ nhánh `agent`; nếu dùng GitHub trên Kaggle,
+Các script lấy mã nguồn hiện tại từ nhánh `asr`; nếu dùng GitHub trên Kaggle,
 cần đưa bản đổi tên lên nhánh đó trước. Riêng script đánh giá adapter khóa SHA
 cũ vẫn nhận diện cấu trúc của commit cũ để giữ nguyên thí nghiệm đã khóa phiên bản.
 
@@ -99,14 +100,14 @@ phần tích hợp không tự tải model hay cài lại PyTorch.
 
 ### Bước 2 — Chạy ASR để tạo văn bản
 
-Mở [notebooks/lifemate/predict_asr.py](notebooks/lifemate/predict_asr.py), sửa các
+Mở [src/asr/notebooks/integration/predict_asr.py](src/asr/notebooks/integration/predict_asr.py), sửa các
 biến trong `main()`:
 
 | Biến | Ý nghĩa |
 |---|---|
 | `DATA_ROOT` | Thư mục gốc dữ liệu; local thường là `C:/zalo_ai/train+public_test`. |
 | `SPLIT` | `train` hoặc `public_test`; chạy toàn bộ split đã chọn. |
-| `MODEL_CONFIG` | Cấu hình ASR; mặc định là `src/asr_benchmark/configs/models/qwen_vimd_pissa_full.json`. |
+| `MODEL_CONFIG` | Cấu hình ASR; mặc định là `src/asr/benchmark/configs/models/qwen_vimd_pissa_full.json`. |
 | `MODEL_PATH` | Đường dẫn base ASR; `None` để tìm trong Hugging Face cache. |
 | `ADAPTER_PATH` | Đường dẫn adapter đã train; `None` dùng đường dẫn trong cấu hình. |
 
@@ -116,7 +117,7 @@ trên Zalo, đặt `ADAPTER_PATH` tới `best_adapter/` của đúng lượt tra
 Từ repo root, chạy bằng Python của môi trường ASR đã chuẩn bị:
 
 ```text
-python notebooks/lifemate/predict_asr.py
+python src/asr/notebooks/integration/predict_asr.py
 ```
 
 Trên Kaggle, script có các cell `# %%` để mở và chạy trong notebook. Dữ liệu
@@ -247,7 +248,7 @@ nhận dạng, quyết định agent hoặc giới hạn thời gian thi. Hướ
 
 ## Đánh giá và so sánh các model ASR gốc
 
-Phần đánh giá nằm trong `src/asr_benchmark`, so sánh PhoWhisper medium/large và
+Phần đánh giá nằm trong `src/asr/benchmark`, so sánh PhoWhisper medium/large và
 Qwen3-ASR 0.6B/1.7B trên tập train. Kết quả gồm CER/WER trước và sau chuẩn hóa,
 cùng thời gian nhận dạng. Trên Kaggle, các model chạy lần lượt; mỗi GPU T4 xử lý
 một phần dữ liệu.
@@ -275,32 +276,32 @@ asr-benchmark benchmark --environment local --run-id example
 ```
 
 Trên Kaggle, dùng `--environment kaggle` và sửa đường dẫn dữ liệu trong
-`src/asr_benchmark/configs/environments/kaggle.json` tới thư mục chứa
+`src/asr/benchmark/configs/environments/kaggle.json` tới thư mục chứa
 `train.jsonl` và `audio/`. Nếu dùng token Hugging Face, thêm Kaggle Secret tên
-`HF_TOKEN`. Notebook benchmark ban đầu là `benchmark-base-asr-model.ipynb` ở repo root.
+`HF_TOKEN`. Notebook benchmark ban đầu ở `src/asr/notebooks/benchmark/benchmark-base-asr-model.ipynb`.
 
 Tiện ích `source_manager` tải các phần mã nguồn được chọn từ GitHub. Lệnh dọn dẹp
 chỉ xóa thư mục mã nguồn có marker quản lý hợp lệ:
 
 ```bash
-PYTHONPATH=src python -m asr_benchmark.source_manager.cli download
-PYTHONPATH=src python -m asr_benchmark.source_manager.cli cleanup
+PYTHONPATH=src python -m asr.benchmark.source_manager.cli download
+PYTHONPATH=src python -m asr.benchmark.source_manager.cli cleanup
 ```
 
 Lệnh dọn dẹp được chạy riêng sau benchmark để bạn kiểm tra kết quả trước khi xóa
 mã nguồn đã tải.
 
-Test cho benchmark và trình quản lý mã nguồn nằm trong `src/asr_benchmark/tests/`.
+Test cho benchmark và trình quản lý mã nguồn nằm trong `src/asr/tests/benchmark/`.
 Từ repo root trên PowerShell:
 
 ```powershell
 $env:PYTHONPATH = "src"
-python -m unittest discover -s src/asr_benchmark/tests/unit -p "test_*.py" -v
+python -m unittest discover -s src/asr/tests/benchmark/unit -p "test_*.py" -v
 ```
 
 ## Huấn luyện ASR và tài liệu chi tiết
 
-- [Huấn luyện PiSSA + CE/SCST trên Zalo](src/asr_finetuning/README.md): dành cho
+- [Huấn luyện PiSSA + CE/SCST trên Zalo](src/asr/finetuning/README.md): dành cho
   thành viên phụ trách fine-tune; không bắt buộc chạy lại khi đã có adapter phù hợp.
 - [So sánh adapter PiSSA và AdaLoRA](docs/benchmark-qwen-full-adapters.md).
 - [Bảng hàm và luồng tích hợp LifeMate](docs/lifemate/README.md).

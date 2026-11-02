@@ -21,9 +21,9 @@ Ref mặc định là nhánh hiện tại agent; cho phép đổi sang branch/ta
 
 ## 2. Tải và xóa source trên Kaggle
 
-Đặt tiện ích source_manager/ và unit tests bên trong package src/asr_benchmark/ để gom toàn bộ thành phần benchmark vào cùng một thư mục. Source manager chỉ dùng Python standard library và lệnh Git; chạy được trước khi cài dependency ASR với PYTHONPATH=src.
+Đặt tiện ích source_manager/ và unit tests bên trong package src/asr/benchmark/ để gom toàn bộ thành phần benchmark vào cùng một thư mục. Source manager chỉ dùng Python standard library và lệnh Git; chạy được trước khi cài dependency ASR với PYTHONPATH=src.
 
-src/asr_benchmark/
+src/asr/benchmark/
 ├── source_manager/
 │   ├── __init__.py
 │   ├── config.json
@@ -50,7 +50,7 @@ Ví dụ cấu hình:
   "ref": "agent",
   "source_dir": "/kaggle/working/_source/ZAIC-76Vibecoders",
   "include_paths": [
-    "src/asr_benchmark",
+    "src/asr/benchmark",
     "pyproject.toml",
     "uv.lock",
     "README.md"
@@ -78,7 +78,7 @@ Package được cài theo cách thông thường, không dùng editable install
 
 ## 3. Cây thư mục benchmark và luồng chạy
 
-src/asr_benchmark/
+src/asr/benchmark/
 ├── __init__.py
 ├── __main__.py
 │

@@ -11,7 +11,7 @@ hàm tạo một ToolEnv riêng cho mỗi mẫu.
 
 | File | Công dụng |
 |---|---|
-| `notebooks/lifemate/predict_asr.py` | Điểm chạy ASR: sửa đường dẫn, chạy toàn bộ split, xuất prediction cho agent. Có percent cells để dùng trên Kaggle. |
+| `src/asr/notebooks/integration/predict_asr.py` | Điểm chạy ASR: sửa đường dẫn, chạy toàn bộ split, xuất prediction cho agent. Có percent cells để dùng trên Kaggle. |
 | `src/lifemate/asr/predict.py` | Dùng lại `create_adapter`, `load`, `transcribe`, `unload` của source ASR hiện tại; quản lý cache và xuất file. |
 | `src/lifemate/asr/predictions.py` | Chuẩn hóa ID/history, ghép prediction thành input agent, kiểm tra file và cung cấp `FileTranscriber`. Chỉ dùng standard library. |
 | `src/lifemate/agent.py` | Toàn bộ code nạp Qwen, tạo prompt, chọn/gọi tool, vòng lặp, ghi kết quả. |
@@ -48,7 +48,7 @@ vào kernel agent để đọc file.
 
 ## 3. Chạy prediction ASR
 
-Mở `notebooks/lifemate/predict_asr.py`, sửa cấu hình trong `main()`:
+Mở `src/asr/notebooks/integration/predict_asr.py`, sửa cấu hình trong `main()`:
 
 ```python
 DATA_ROOT = "C:/zalo_ai/train+public_test"
@@ -60,7 +60,7 @@ ADAPTER_PATH = None
 - `DATA_ROOT` chứa các thư mục split. Ví dụ Kaggle:
   `/kaggle/input/datasets/khangl123/zalo-ai/train+public_test`.
 - `MODEL_CONFIG` mặc định dùng file PiSSA của repo:
-  `src/asr_benchmark/configs/models/qwen_vimd_pissa_full.json`.
+  `src/asr/benchmark/configs/models/qwen_vimd_pissa_full.json`.
   Base là `Qwen/Qwen3-ASR-1.7B-hf` với revision trong config.
 - `MODEL_PATH`: thư mục **base ASR** đã tải; `None` tìm trong Hugging Face cache.
   Mặc định `local_files_only=True`; chưa có base trong cache thì dừng, không tự tải.
@@ -77,13 +77,11 @@ ADAPTER_PATH = None
 Chạy bằng Python của môi trường native ASR đã có trong đội:
 
 ```text
-python notebooks/lifemate/predict_asr.py
+python src/asr/notebooks/integration/predict_asr.py
 ```
 
-Trên Kaggle cần đưa **source mới của nhánh `agent`** vào phiên chạy và đặt
-`ZAIC_PROJECT_ROOT` nếu repo nằm khác working directory. Các launcher cũ đang
-trỏ nhánh `benchmark_base_asr_model` sẽ chưa có phần nối này. Thay đổi hiện chỉ
-ở máy local; không có thao tác commit hoặc push tự động.
+Trên Kaggle cần đưa **source mới của nhánh `asr`** vào phiên chạy và đặt
+`ZAIC_PROJECT_ROOT` nếu repo nằm khác working directory.
 
 Backend PiSSA dùng `QwenHFPEFTAdapter` của repo, tức môi trường Transformers 5 /
 PEFT theo `requirements/qwen-adapter-benchmark.txt`. Bộ baseline `qwen-asr` SDK
@@ -125,7 +123,7 @@ config hoặc adapter đã thay đổi, chọn `OUTPUT_DIR` mới để tránh t
 Có thể chuyển file cũ thay vì chạy inference lại:
 
 ```python
-from lifemate.asr.predictions import convert_prediction_files
+from asr.integration.predictions import convert_prediction_files
 
 convert_prediction_files(
     data_root="C:/zalo_ai/train+public_test",

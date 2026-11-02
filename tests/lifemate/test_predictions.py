@@ -17,11 +17,11 @@ from unittest.mock import Mock, patch
 import uuid
 import wave
 
-from lifemate.asr.predictions import (
+from asr.integration.predictions import (
     FileTranscriber, PredictionContractError, assemble_speech_rows, build_audio_manifest,
     convert_prediction_files, load_items, read_jsonl, validate_speech_rows, write_speech_file,
 )
-from lifemate.asr.predict import load_model_settings, predict_lifemate
+from asr.integration.predict import load_model_settings, predict_lifemate
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -95,6 +95,12 @@ class FakeAdapter:
 
 
 class SpeechContractTests(unittest.TestCase):
+    def test_unknown_history_role_uses_prediction_contract_error(self):
+        with fixture() as (root, items, _, __):
+            items[0]["history"].append({"role": "tool", "text": "result"})
+            with self.assertRaisesRegex(PredictionContractError, "History role"):
+                build_audio_manifest(items, root, "train")
+
     def test_manifest_contains_current_and_original_user_history_indices_without_gold(self):
         with fixture() as (root, items, _, __):
             manifest = build_audio_manifest(items, root, "train")
@@ -308,9 +314,14 @@ class AgentHandoffTests(unittest.TestCase):
                     agent.run_full_pipeline(root, asr_predictions_path=root / "missing.jsonl", toolenv_loader=toolenv)
             qwen.assert_not_called(); toolenv.assert_not_called()
 
-    def test_toolenv_is_still_an_explicit_leader_placeholder(self):
-        with self.assertRaises(NotImplementedError):
-            load_agent_module().load_toolenv("unused", "train")
+    def test_toolenv_loader_returns_factory_without_creating_env(self):
+        agent = load_agent_module()
+        factory = Mock()
+        with patch.object(agent, "get_tool_env_factory", return_value=factory):
+            make_env = agent.load_toolenv("data", "train")
+            factory.assert_not_called()
+            make_env("sample")
+        factory.assert_called_once_with("train", "sample", root="data")
 
     @unittest.skipUnless(os.environ.get("LIFEMATE_DATA_ROOT"), "Set LIFEMATE_DATA_ROOT for optional official-runtime check")
     def test_prediction_file_to_official_toolenv_with_scripted_llm(self):

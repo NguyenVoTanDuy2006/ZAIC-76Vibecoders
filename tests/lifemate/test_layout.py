@@ -8,7 +8,7 @@ from unittest import TestCase
 from unittest.mock import Mock, patch
 
 from lifemate import agent, paths
-from lifemate.asr.predictions import assemble_speech_rows, build_audio_manifest, write_speech_file
+from asr.integration.predictions import assemble_speech_rows, build_audio_manifest, write_speech_file
 from test_predictions import REPO, fixture, fake_predictions
 
 
@@ -23,7 +23,7 @@ def working_directory(path):
 
 
 def asr_launcher():
-    script = REPO / "notebooks/lifemate/predict_asr.py"
+    script = REPO / "src/asr/notebooks/integration/predict_asr.py"
     namespace = {"__name__": "asr_launcher_under_test", "__file__": str(script)}
     exec(compile(script.read_text(encoding="utf-8"), str(script), "exec"), namespace)
     return namespace

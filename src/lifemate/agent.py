@@ -701,7 +701,7 @@ def run_items(items, catalog, speech_by_id, env_factory, backend, config=None):
 # ===========================================================================
 def load_asr(data_root, split, predictions_path=None):
     """Đọc prediction ASR đã xuất; thiếu ID/history thì dừng trước khi nạp Qwen."""
-    from lifemate.asr.predictions import FileTranscriber
+    from asr.integration.predictions import FileTranscriber
 
     # Chỉ đọc file bàn giao, không nạp/chạy model ASR trong luồng agent.
     # predictions_path cho phép đọc file chuyển từ Kaggle sang local hoặc ngược lại.
