@@ -1,0 +1,18 @@
+{
+  "method": "pissa",
+  "export": "converted_standard_lora",
+  "training_rank": 8,
+  "export_rank": 16,
+  "load_on": "original_pretrained_base",
+  "settings": {
+    "r": 8,
+    "alpha": 16,
+    "dropout": 0.0,
+    "target_modules": [
+      "q_proj",
+      "v_proj"
+    ],
+    "init_lora_weights": "pissa_niter_4",
+    "init_seed": 1234
+  }
+}

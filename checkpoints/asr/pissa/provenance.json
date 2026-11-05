@@ -1,0 +1,43 @@
+{
+  "python": "3.12.3",
+  "packages": {
+    "torch": "2.6.0+cu124",
+    "transformers": "5.17.0",
+    "peft": "0.21.1",
+    "accelerate": "1.12.0",
+    "bert-score": "0.3.13",
+    "pyvi": "0.1.1",
+    "numpy": "2.2.6",
+    "scipy": "1.15.3",
+    "soundfile": "0.13.1",
+    "librosa": "0.11.0",
+    "huggingface-hub": "1.33.0",
+    "safetensors": "0.8.0"
+  },
+  "config_fingerprint": "86dc731f9221d5a58f7de41ee4a7411764dd18cd93e752d277a7fd56a059b085",
+  "source_fingerprint": "e086f0277c1d403ddd04a185e70c7b6911f9e10e86f9540f702399cad0819af4",
+  "scorer_fingerprint": "e397af1859147d2af2fd97d8cbf628d5c06d0b82cdd7a007c05d073f4d54265d",
+  "semantics": "NFC/lowercase/punctuation-to-space/whitespace + PyVi; digits unchanged; no IDF/rescale",
+  "resume": "completed epochs, identical world size; restore complete resume bundle",
+  "last_runtime": {
+    "python": "3.12.3",
+    "packages": {
+      "torch": "2.6.0+cu124",
+      "transformers": "5.17.0",
+      "peft": "0.21.1",
+      "accelerate": "1.12.0",
+      "bert-score": "0.3.13",
+      "pyvi": "0.1.1",
+      "numpy": "2.2.6",
+      "scipy": "1.15.3",
+      "soundfile": "0.13.1",
+      "librosa": "0.11.0",
+      "huggingface-hub": "1.33.0",
+      "safetensors": "0.8.0"
+    }
+  },
+  "devices": [
+    "Tesla T4",
+    "Tesla T4"
+  ]
+}

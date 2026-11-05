@@ -1,0 +1,12 @@
+{
+  "key": "qwen_zaic_pissa_scst",
+  "backend": "qwen3_asr",
+  "model_id": "Qwen/Qwen3-ASR-1.7B-hf",
+  "revision": "bcd2b5b7f32b480ab5790554cfa8347f246a14f3",
+  "adapter_path": "best_adapter",
+  "dtype": "float16",
+  "trust_remote_code": false,
+  "training_method": "pissa_converted_lora",
+  "selected_epoch": 3,
+  "selection": "validation.latest.normalized_bertscore_f1"
+}
