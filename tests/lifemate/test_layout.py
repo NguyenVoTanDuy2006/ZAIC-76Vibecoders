@@ -60,7 +60,7 @@ class LayoutIntegrationTests(TestCase):
             self.assertEqual(paths.agent_output_dir(), Path("/kaggle/working/lifemate/agent"))
 
     def test_agent_notebook_runs_from_its_new_folder_using_the_shared_module(self):
-        notebook = REPO / "notebooks/lifemate/run_agent.ipynb"
+        notebook = REPO / "src/lifemate/notebooks/run_agent.ipynb"
         nb = json.loads(notebook.read_text(encoding="utf-8"))
         for on_kaggle in (False, True):
             with self.subTest(on_kaggle=on_kaggle):

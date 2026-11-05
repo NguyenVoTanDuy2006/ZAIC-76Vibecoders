@@ -1,7 +1,7 @@
 # ASR prediction → LifeMate agent
 
 Nhánh làm việc: `agent`. Phần này nối ASR có sẵn của đội với notebook
-`notebooks/lifemate/run_agent.ipynb`. Code xử lý nằm trong `src/lifemate/`,
+`src/lifemate/notebooks/run_agent.ipynb`. Code xử lý nằm trong `src/lifemate/`,
 notebook chỉ cấu hình và gọi module. ASR nhận audio và trả text; agent nhận text, context,
 history và schema tools để quyết định hành động. Hook
 `src/lifemate/agent.py::load_toolenv()` nạp thư viện BTC từ đúng split và trả
@@ -16,7 +16,7 @@ hàm tạo một ToolEnv riêng cho mỗi mẫu.
 | `src/lifemate/asr/predictions.py` | Chuẩn hóa ID/history, ghép prediction thành input agent, kiểm tra file và cung cấp `FileTranscriber`. Chỉ dùng standard library. |
 | `src/lifemate/agent.py` | Toàn bộ code nạp Qwen, tạo prompt, chọn/gọi tool, vòng lặp, ghi kết quả. |
 | `src/lifemate/paths.py` | Đường dẫn dùng chung: ASR ghi ra đúng file mà agent đọc. |
-| `notebooks/lifemate/run_agent.ipynb` | Import module agent, sửa cấu hình, chạy. Không có bản sao code agent trong notebook. |
+| `src/lifemate/notebooks/run_agent.ipynb` | Import module agent, sửa cấu hình, chạy. Không có bản sao code agent trong notebook. |
 | `tests/lifemate/test_predictions.py` | Test contract, prediction cache và điểm nối vào module agent bằng dữ liệu/ASR/LLM giả. |
 | `tests/lifemate/test_layout.py` | Test hai launcher sau khi chuyển thư mục, kể cả đường dẫn local và Kaggle. |
 
@@ -84,7 +84,7 @@ Trên Kaggle cần đưa **source mới của nhánh `asr`** vào phiên chạy 
 `ZAIC_PROJECT_ROOT` nếu repo nằm khác working directory.
 
 Backend PiSSA dùng `QwenHFPEFTAdapter` của repo, tức môi trường Transformers 5 /
-PEFT theo `requirements/qwen-adapter-benchmark.txt`. Bộ baseline `qwen-asr` SDK
+PEFT theo `src/asr/benchmark/requirements.txt`. Bộ baseline `qwen-asr` SDK
 dùng Transformers 4.57.6 là một môi trường khác. Không có lệnh tự cài hoặc thay
 PyTorch trong phần nối này.
 
@@ -144,7 +144,7 @@ liệu: chỉ chuyển thành file toàn split khi đã có đủ mọi ID và m
 ## 4. Nối vào notebook LifeMate
 
 Notebook tự tìm repo từ thư mục hiện tại/các thư mục cha. Có thể mở ngay trong
-`notebooks/lifemate/`; nếu source ở chỗ khác, đặt `ZAIC_PROJECT_ROOT` trỏ tới repo.
+`src/lifemate/notebooks/`; nếu source ở chỗ khác, đặt `ZAIC_PROJECT_ROOT` trỏ tới repo.
 Notebook import `lifemate.agent`, nên model chỉ nạp khi gọi runner. Trong cell chạy:
 
 ```python

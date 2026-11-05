@@ -12,7 +12,7 @@ Phần nối đã có test; suy luận ASR/Qwen thật trên GPU chưa được 
 | Bạn muốn làm gì? | Mở file nào? |
 |---|---|
 | Sinh văn bản cho yêu cầu hiện tại và các lượt người dùng trong lịch sử | [src/asr/notebooks/integration/predict_asr.py](src/asr/notebooks/integration/predict_asr.py) |
-| Chạy agent từ text ASR | [notebooks/lifemate/run_agent.ipynb](notebooks/lifemate/run_agent.ipynb) |
+| Chạy agent từ text ASR | [src/lifemate/notebooks/run_agent.ipynb](src/lifemate/notebooks/run_agent.ipynb) |
 | Sửa hướng dẫn cho model, quyết định gọi công cụ, vòng lặp hoặc nối ToolEnv | [src/lifemate/agent.py](src/lifemate/agent.py) |
 | Hiểu từng hàm, định dạng và cách bàn giao | [docs/lifemate/README.md](docs/lifemate/README.md) |
 | Xem cấu trúc ASR và các lệnh kiểm thử | [src/asr/README.md](src/asr/README.md) |
@@ -23,33 +23,29 @@ Phần nối đã có test; suy luận ASR/Qwen thật trên GPU chưa được 
 ZAIC-76Vibecoders/
 ├── README.md                          # Bản đồ repo và thứ tự chạy
 ├── pyproject.toml                     # Khai báo gói Python và thư viện phụ thuộc
-├── notebooks/
-│   └── lifemate/
-│       └── run_agent.ipynb            # Bước 2: cấu hình và gọi agent
 ├── src/
 │   ├── asr/
 │   │   ├── common/                    # Chuẩn hóa text, edit counts, lượt audio dùng chung
-│   │   ├── benchmark/                 # Đánh giá model ASR và adapter
+│   │   ├── benchmark/                 # Đánh giá ASR; requirements.txt riêng
 │   │   ├── finetuning/                # Huấn luyện PiSSA + CE/SCST
 │   │   ├── integration/               # Prediction ASR cho LifeMate
 │   │   ├── notebooks/                 # Notebook local (.ipynb) và Kaggle (# %% .py)
 │   │   └── tests/                     # Test benchmark và fine-tuning
 │   └── lifemate/                      # Agent, ToolEnv và đường dẫn bàn giao
 │       ├── agent.py
-│       └── paths.py
+│       ├── paths.py
+│       └── notebooks/run_agent.ipynb  # Bước 2: cấu hình và gọi agent
 ├── tests/
 │   └── lifemate/                      # Kiểm thử định dạng, luồng tích hợp và đường dẫn chạy
 ├── docs/
 │   └── lifemate/README.md             # Luồng xử lý và bảng chức năng chi tiết
-├── requirements/                      # Thư viện cho môi trường ASR và đánh giá adapter
-└── output/
-    └── lifemate/                      # Kết quả LifeMate sinh khi chạy
-        ├── asr/<split>/
-        │   ├── asr_predictions.jsonl  # Văn bản ASR hoàn chỉnh đưa cho agent
-        │   ├── audio_predictions.jsonl # Bộ nhớ đệm kết quả nhận dạng từng audio
-        │   └── prediction_metadata.json # Danh tính dữ liệu, cấu hình và model
-        └── agent/<run_id>/            # Kết quả JSONL và nhật ký từng mẫu
+└── output/.gitkeep                    # Thư mục output rỗng trên GitHub
 ```
+
+`data/` và mọi kết quả sinh trong `output/` không được đưa lên GitHub. Khi chạy,
+ASR ghi `output/lifemate/asr/<split>/` và agent ghi
+`output/lifemate/agent/<run_id>/` trên máy local; Kaggle ghi vào
+`/kaggle/working`.
 
 ## Luồng chạy LifeMate
 
@@ -88,7 +84,7 @@ cần đưa bản đổi tên lên nhánh đó trước. Riêng script đánh gi
 cũ vẫn nhận diện cấu trúc của commit cũ để giữ nguyên thí nghiệm đã khóa phiên bản.
 
 Môi trường ASR PiSSA dùng thư viện theo
-[`requirements/qwen-adapter-benchmark.txt`](requirements/qwen-adapter-benchmark.txt).
+[`src/asr/benchmark/requirements.txt`](src/asr/benchmark/requirements.txt).
 ASR và agent có thể chạy bằng hai môi trường riêng vì trao đổi bằng JSONL.
 Gói `.[asr]` ở phần benchmark phía dưới dành cho bộ baseline SDK, không phải
 hướng dẫn cài môi trường PiSSA này.
@@ -164,7 +160,7 @@ hay `state.json` để thay cho API công cụ.
 
 ### Bước 5 — Chạy notebook agent
 
-Mở [notebooks/lifemate/run_agent.ipynb](notebooks/lifemate/run_agent.ipynb), chạy
+Mở [src/lifemate/notebooks/run_agent.ipynb](src/lifemate/notebooks/run_agent.ipynb), chạy
 các cell từ trên xuống và kiểm tra:
 
 - `DATA_ROOT`: cùng bộ dữ liệu đã dùng ở bước ASR.

@@ -73,6 +73,17 @@ def benchmark_package(source_root):
     raise FileNotFoundError("Source thiếu module benchmark Qwen adapters")
 
 
+def benchmark_requirements(source_root):
+    """Use the package-local file, or the path from the pinned historical SHA."""
+    source_root = Path(source_root)
+    for relative in ("src/asr/benchmark/requirements.txt",
+                     "requirements/qwen-adapter-benchmark.txt"):
+        path = source_root / relative
+        if path.is_file():
+            return path
+    raise FileNotFoundError("Source thiếu requirements cho benchmark Qwen adapters")
+
+
 def resolve_model_configs(source_root, target, *, config_paths=None, adapter_overrides=None):
     config_root = Path(source_root) / "src" / benchmark_package(source_root).replace(".", "/") / "configs/models"
     config_paths = ([config_root / f"qwen_vimd_{method}_full.json" for method in ("pissa", "adalora")]
@@ -242,7 +253,7 @@ if __name__ == "__main__":
         checked([VENV_PYTHON, "-m", "pip", "install", "torch==2.6.0", "--index-url",
                  "https://download.pytorch.org/whl/cu124"], env=child_env)
         checked([VENV_PYTHON, "-m", "pip", "install", "-r",
-                 SOURCE_ROOT / "requirements/qwen-adapter-benchmark.txt", "-c", constraint], env=child_env)
+                 benchmark_requirements(SOURCE_ROOT), "-c", constraint], env=child_env)
     probe = json.loads(checked([VENV_PYTHON, "-c",
         "import json, torch, transformers, peft; print(json.dumps({"
         "'gpus': [torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())], "

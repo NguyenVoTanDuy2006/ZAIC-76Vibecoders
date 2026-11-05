@@ -46,7 +46,7 @@ def output_root(project_root=None):
     if _on_kaggle():
         # Kaggle ghi kết quả vào /kaggle/working, không ghi vào /kaggle/input.
         return Path("/kaggle/working/lifemate")
-    # Local luôn ghi theo repo, kể cả khi mở notebook ở notebooks/lifemate/.
+    # Local luôn ghi theo repo, kể cả khi mở notebook ở src/lifemate/notebooks/.
     root = Path(project_root).resolve() if project_root is not None else find_project_root()
     return root / "output/lifemate"
 

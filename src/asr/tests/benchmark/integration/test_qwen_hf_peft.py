@@ -1,7 +1,7 @@
 """Offline CPU API smoke test; set QWEN_TEST_PROCESSOR_PATH to a cached processor.
 
 Uses tiny random Qwen weights, not a substitute for benchmarking the real model.
-Run in the dedicated requirements/qwen-adapter-benchmark.txt environment.
+Run in the dedicated src/asr/benchmark/requirements.txt environment.
 """
 from __future__ import annotations
 

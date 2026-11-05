@@ -23,7 +23,7 @@ class QwenHFPEFTAdapter:
             from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration
         except ImportError as exc:
             raise RuntimeError("Qwen HF adapters require the separate Transformers 5 environment; "
-                               "install requirements/qwen-adapter-benchmark.txt") from exc
+                               "install src/asr/benchmark/requirements.txt") from exc
 
         self.device = runtime_config.get("device", "cuda:0")
         self.dtype = torch.float16 if runtime_config.get("dtype") == "float16" else torch.float32

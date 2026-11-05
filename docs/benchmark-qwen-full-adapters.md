@@ -53,7 +53,7 @@ Notebook tạo một virtualenv riêng bằng pip; CLI có thể dùng môi trư
 
 ```bash
 python3 -m venv /tmp/qwen-adapter-benchmark
-/tmp/qwen-adapter-benchmark/bin/python -m pip install -r requirements/qwen-adapter-benchmark.txt
+/tmp/qwen-adapter-benchmark/bin/python -m pip install -r src/asr/benchmark/requirements.txt
 ```
 
 Notebook local: `src/asr/notebooks/benchmark/benchmark-qwen-full-adapters-local.ipynb`.

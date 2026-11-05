@@ -89,6 +89,16 @@ class QwenKaggleNotebookTests(unittest.TestCase):
         marker = json.loads((target / ".source_manager.json").read_text())
         self.assertEqual(marker["commit"], revision)
 
+    def test_requirements_path_supports_current_and_historical_source(self):
+        current = self.root / "current/src/asr/benchmark/requirements.txt"
+        current.parent.mkdir(parents=True)
+        current.touch()
+        self.assertEqual(self.module.benchmark_requirements(self.root / "current"), current)
+        historical = self.root / "historical/requirements/qwen-adapter-benchmark.txt"
+        historical.parent.mkdir(parents=True)
+        historical.touch()
+        self.assertEqual(self.module.benchmark_requirements(self.root / "historical"), historical)
+
     def test_historical_pinned_checkout_keeps_its_original_package_name(self):
         legacy = self.root / "historical-source/src/benchmark_baseline_asr/workflow/benchmark_qwen_adapters.py"
         legacy.parent.mkdir(parents=True)
