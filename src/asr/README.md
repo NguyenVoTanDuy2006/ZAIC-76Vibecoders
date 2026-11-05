@@ -6,19 +6,24 @@ src/asr/
 ├── benchmark/     # Config, backend và workflow so sánh ASR
 ├── finetuning/    # Trainer Qwen3-ASR PiSSA, cấu hình và runtime riêng
 ├── integration/   # Sinh/đọc prediction để bàn giao cho LifeMate
+├── postprocess/   # LM sửa ASR, kiểm tra và so sánh CER/WER
 ├── notebooks/
 │   ├── benchmark/   # Baseline, adapter và khảo sát âm thanh
 │   ├── finetuning/  # Kaggle percent script huấn luyện
-│   └── integration/ # Kaggle percent script sinh ASR cho agent
+│   ├── integration/ # Kaggle percent script sinh ASR cho agent
+│   └── postprocess/ # Kaggle percent script thử 1+6 bản ASR
 └── tests/
     ├── benchmark/
-    └── finetuning/
+    ├── finetuning/
+    └── postprocess/
 ```
 
 `asr.common` chỉ dùng Python standard library để cả benchmark, trainer và
 prediction contract cùng dùng. `asr.benchmark` và `asr.finetuning` có môi trường
 dependency khác nhau; cài theo README của từng phần. `asr.integration` dùng
 benchmark adapter để suy luận, còn `src/lifemate/` giữ agent và ToolEnv.
+Thí nghiệm `asr.postprocess` dùng prediction PiSSA đã có, không thay file agent
+đang đọc; cách chạy và output nằm trong [postprocess/README.md](postprocess/README.md).
 
 Notebook local dùng `.ipynb`; Kaggle launcher mới dùng `.py` với cell `# %%`
 và cài dependency bằng pip. Script adapter benchmark giữ SHA lịch sử để tái lập
@@ -30,5 +35,6 @@ Chạy test từ repo root với `PYTHONPATH=src`:
 ```bash
 python -m unittest discover -s src/asr/tests/benchmark/unit -p 'test_*.py' -v
 python -m unittest discover -s src/asr/tests/finetuning -p 'test_*.py' -v
+python -m unittest discover -s src/asr/tests/postprocess -p 'test_*.py' -v
 python -m unittest discover -s tests/lifemate -p 'test_*.py' -v
 ```

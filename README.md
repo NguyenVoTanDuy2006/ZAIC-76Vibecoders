@@ -12,6 +12,7 @@ Phần nối đã có test; suy luận ASR/Qwen thật trên GPU chưa được 
 | Bạn muốn làm gì? | Mở file nào? |
 |---|---|
 | Sinh văn bản cho yêu cầu hiện tại và các lượt người dùng trong lịch sử | [src/asr/notebooks/integration/predict_asr.py](src/asr/notebooks/integration/predict_asr.py) |
+| Thử LM sửa transcript PiSSA và so sánh 1+6 kết quả | [src/asr/notebooks/postprocess/compare_asr_lm.py](src/asr/notebooks/postprocess/compare_asr_lm.py) |
 | Chạy agent từ text ASR | [notebooks/lifemate/run_agent.ipynb](notebooks/lifemate/run_agent.ipynb) |
 | Sửa hướng dẫn cho model, quyết định gọi công cụ, vòng lặp hoặc nối ToolEnv | [src/lifemate/agent.py](src/lifemate/agent.py) |
 | Hiểu từng hàm, định dạng và cách bàn giao | [docs/lifemate/README.md](docs/lifemate/README.md) |
@@ -32,6 +33,7 @@ ZAIC-76Vibecoders/
 │   │   ├── benchmark/                 # Đánh giá model ASR và adapter
 │   │   ├── finetuning/                # Huấn luyện PiSSA + CE/SCST
 │   │   ├── integration/               # Prediction ASR cho LifeMate
+│   │   ├── postprocess/               # Thí nghiệm LM sửa transcript ASR
 │   │   ├── notebooks/                 # Notebook local (.ipynb) và Kaggle (# %% .py)
 │   │   └── tests/                     # Test benchmark và fine-tuning
 │   └── lifemate/                      # Agent, ToolEnv và đường dẫn bàn giao
@@ -66,6 +68,7 @@ flowchart TD
 
 Các phần ASR nằm trong `src/asr/`: `asr.benchmark` để đánh giá model,
 `asr.finetuning` để huấn luyện, `asr.integration` để tạo prediction cho agent,
+`asr.postprocess` để thử và đánh giá hậu xử lý transcript,
 và `asr.common` cho logic dùng chung. `lifemate` chạy agent. Gói mẫu đã xóa
 không còn trong cấu hình cài đặt hoặc danh sách lệnh chạy. Sau khi cài dự án,
 lệnh `lifemate-agent` gọi chương trình điều phối agent; `asr-benchmark` chạy
