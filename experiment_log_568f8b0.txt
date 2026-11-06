@@ -1,0 +1,253 @@
+NHẬT KÝ BÀN GIAO THỬ NGHIỆM LIFEMATE AGENT
+Mốc code: commit 568f8b0
+Ngày lập báo cáo: 06/11/2026
+
+1. PHẠM VI BẢN BÀN GIAO
+
+Commit: 568f8b0 - Refactor LifeMate agent into grounded BTC pipeline
+Thời điểm commit: 06/11/2026 12:33:41, múi giờ +07:00.
+
+File này mô tả code và notebook TẠI COMMIT trên. Những sửa đổi ledger,
+routing theo goal và write review mới trong working tree chưa thuộc commit đó.
+Không checkout, sửa hay chạy lại bản cũ trong lượt ghi nhật ký này.
+
+Nguồn đối chiếu:
+- git show 568f8b0:src/lifemate/pipeline/config.py
+- git show 568f8b0:src/lifemate/agent.py
+- git show 568f8b0:src/lifemate/pipeline/task_reasoning.py
+- git show 568f8b0:src/lifemate/pipeline/checkpoint.py
+- Notebook notebooks/lifemate/test_lifemate.ipynb tại cùng commit.
+- Log người dùng cung cấp trong output_test_notbook được ghi riêng ở mục 8.
+
+2. ĐÃ THỬ NGHIỆM THEO HƯỚNG NÀO?
+
+Ban đầu thử controller nhiều pha với JSON nội bộ cho plan/review/recovery.
+Các trace người dùng gửi có control_error vì sửa schema nội bộ liên tục,
+nhầm điều kiện với hoàn thành hành động, hoặc đánh dấu done khi chưa chạy write.
+
+Sau đó thống nhất đường mặc định btc-tool-call-v1:
+- Model đề xuất một call {name, arguments}, hoặc câu trả lời cuối.
+- Code quản lý pending call, execution ID, receipt, status và budget.
+- Controller JSON cũ được giữ để đối chiếu, không chạy ở đường mặc định.
+- Thử base trước, sau đó bổ sung grounding, terminal check và working brief /
+  write check để cải thiện việc hiểu yêu cầu, arguments và phụ thuộc.
+
+Đây là các bước phát triển đã thử, không phải khẳng định mọi pha đều đang tắt
+trong commit 568f8b0. Trạng thái mặc định thực tế nằm ở mục 3.
+
+3. CÁC PHA BẬT / TẮT TẠI COMMIT 568f8b0
+
+BẬT mặc định:
+- Actor: model chọn call tiếp theo hoặc final.
+- Grounding: bổ sung facts từ yêu cầu/context/history/kết quả tool thật;
+  kiểm tra nguồn ID, chuỗi điện thoại, qualifier và số tiền trong phạm vi hỗ trợ.
+- task_plan: một working brief văn bản, tối đa một lượt; giới hạn 512 tokens.
+  Brief giúp liệt kê việc, arguments, nguồn dữ liệu và phụ thuộc.
+  Brief không phải JSON DAG, không phải bằng chứng hành động đã xảy ra.
+- write_check: kiểm tra trước write do actor đề xuất; output vẫn dùng call/final
+  theo giao thức chung. Tối đa max_calls lượt check trên toàn mẫu.
+- terminal_check: kiểm tra final hoặc ask hợp lệ; tối đa 2 lượt TOÀN MẪU.
+- Call repair trong vòng actor: feedback schema/tool không được phép/x-ref,
+  rồi model đề xuất lại; không có một model recovery riêng.
+- sys.ask_missing_info: có nối qua executor; call hợp lệ chạy thành công thì
+  session chuyển waiting_for_user.
+- Guard schema bằng env.validate(), provenance, budget và canonical log.
+
+KHÔNG CHẠY mặc định:
+- Controller snapshot-json-v2 / recovery-json-v3 và các pha plan/approve/
+  decision/replan/reinterpret theo contract JSON cũ.
+- Các vòng sửa base_version, operation_id, postcondition của controller cũ.
+- Một pha recovery model riêng để quyết định chiến lược phục hồi.
+- ASR thật trong cấu hình oracle của notebook thử nghiệm này.
+
+CHƯA CÓ trong commit này:
+- task_ledger.py: bảng goal/slot/trạng thái có nguồn do code quản lý.
+- tool_routing.py: focus schema theo goal/slot còn thiếu.
+- call_recovery.py: nhánh chặn lookup rỗng lặp lại được bổ sung sau commit.
+- finalization.py: nhánh sửa riêng output final được bổ sung sau commit.
+
+Lưu ý tên flag:
+- review_writes=True, review_finish=True, route_tools=True và
+  adaptive_controller=True vẫn có trong config vì tương thích controller cũ.
+- Với unified_protocol=True, không thể dựa vào các flag lịch sử đó để kết luận
+  approve/recovery cũ đang chạy.
+- Muốn tắt working brief và write check mới: task_reasoning_enabled=False.
+- Muốn tắt terminal check mới: terminal_check_enabled=False.
+
+4. CẤU HÌNH MẶC ĐỊNH ĐÃ ĐỐI CHIẾU TỪ COMMIT
+
+workflow_enabled = True
+unified_protocol = True
+grounding_enabled = True
+task_reasoning_enabled = True
+terminal_check_enabled = True
+planning_max_new_tokens = 512
+max_terminal_checks = 2
+max_steps = 48                 # Tổng lượt sinh model, tính cả các check.
+max_calls = 12                 # Giới hạn tool execution của một mẫu.
+max_invalid_replies = 2        # Giới hạn proposal bị từ chối liên tiếp.
+max_context_tokens = 16384
+max_new_tokens = 256           # Actor / check thông thường.
+prefill_chunk_size = 512
+max_no_progress = 3
+max_seconds = None             # Không đặt timeout theo giây trong config này.
+check_reference_provenance = True
+
+adaptive_planning CHƯA có trong config ở commit 568f8b0.
+
+5. PIPELINE ĐANG CHẠY Ở BẢN COMMIT
+
+Request + user-history transcripts + public context + installed tool schemas
+  -> grounding context
+  -> working brief một lần nếu task_reasoning_enabled
+  -> actor đề xuất một call hoặc final
+  -> parse + schema / nguồn ID / grounding / budget guards
+  -> write_check nếu là write từ actor và task reasoning đang bật
+  -> pending ticket do code cấp
+  -> execution.py gọi ToolEnv đúng một lần
+  -> xác minh canonical log, lưu receipt và trả tool_result
+  -> actor chọn bước tiếp theo.
+
+Final hoặc ask hợp lệ -> terminal_check nếu bật -> các guard thông thường
+-> finish / waiting_for_user, hoặc một call tiếp theo.
+
+Call thay thế từ terminal check không thêm một write check đệ quy.
+Call không hợp lệ nhận feedback để model đề xuất lại; chưa thực thi vào env.
+Tại commit này, mọi schema tool đã cài đều được đưa vào lượt model của đường
+unified; chưa có chọn schema theo active goal như bản cải thiện sau commit.
+
+Một Qwen được dùng lại cho cả batch; đúng một ToolEnv mới cho mỗi mẫu.
+Chỉ src/lifemate/pipeline/execution.py thực hiện env.call().
+Submission lấy từ env.get_tool_calls() và env.get_state_hash(), không tự ghép
+call model dự đoán vào output và không dùng gold label để điều khiển runtime.
+
+6. CÁCH NGƯỜI DÙNG ĐANG TEST TRÊN KAGGLE
+
+Notebook: notebooks/lifemate/test_lifemate.ipynb.
+Model: Qwen/Qwen3-4B-Instruct-2507, DEVICE=cuda:0.
+Notebook mặc định ALLOW_MODEL_DOWNLOADS=True; credentials nếu cần qua Kaggle Secrets.
+SAMPLE_COUNT=10, SAMPLE_IDS=None: lấy 10 dòng đầu train theo thứ tự dữ liệu,
+không giả định ID liên tục từ train_0001 đến train_0010.
+ASR_MODE="oracle_train_audio_text", ASR_FILE=None.
+AGENT_OPTIONS={} dùng các default đã liệt kê ở mục 4.
+DATA_ROOT=/kaggle/input/datasets/khangl123/zalo-ai/train+public_test
+Output mỗi lượt ở /kaggle/working/lifemate-agent-train10/<run-id>/...
+
+Oracle-ASR có nghĩa là lấy transcript chuẩn của audio hiện tại và user-history
+để đo agent. Đây không phải kết quả ASR inference hoặc leaderboard end-to-end.
+Gold tool calls chỉ dùng khi đánh giá sau inference.
+
+Các mục notebook:
+1. Cấu hình model/data/agent options.
+2. Tải source và cài source bundle agent từ chính notebook.
+3. Chuẩn bị input, helper đánh giá và kiểm tra ToolEnv.
+4. Cài thư viện vào kernel hiện tại.
+5. Nạp model vào qwen_backend; đây là cell nạp Qwen.
+6. Chạy agent dùng lại qwen_backend, tạo output và traces.
+7. Đọc kết quả; cần chạy mục này trước mục đánh giá tiếp theo.
+8. Đánh giá exact tool calls và finished status.
+8b. Ablation tùy chọn; không tự chạy mặc định.
+9. Đọc trace chi tiết, không chạy lại model.
+
+Trong kernel đã nạp model và thư viện đầy đủ, cập nhật source notebook rồi chạy
+1 -> 2 -> 3 -> 6 -> 7 -> 8 -> 9 để dùng lại Qwen.
+
+Notebook tại commit này vẫn có SOURCE_REF trỏ checkout SDK đã merge:
+1ab6b8d1c13f224a9053ae30dd71b89bec695df8.
+Cell 2 có embedded source patch cho agent/pipeline. Vì vậy SOURCE_REF một mình
+không đại diện toàn bộ code chạy: phải dùng đúng notebook của commit và kiểm tra
+source bundle SHA / source phiên runtime. Không trộn cell 2 mới vào một phép đo
+muốn tái lập nguyên trạng commit 568f8b0.
+
+7. CẤU HÌNH ABLATION ĐỂ TRAO ĐỔI VỚI NGƯỜI NHẬN
+
+Các cấu hình dưới đây là cách chọn chế độ, không phải các lượt đã được chạy lại
+trong lúc tạo file này. Đặt AGENT_OPTIONS ở mục 1, chạy lại source/config và agent.
+
+A. Base + grounding; tắt brief / write check / terminal check:
+AGENT_OPTIONS = {
+    "task_reasoning_enabled": False,
+    "terminal_check_enabled": False,
+}
+
+B. Base + grounding + terminal check; tắt brief và write check:
+AGENT_OPTIONS = {"task_reasoning_enabled": False}
+
+C. Đầy đủ cơ chế mặc định tại commit:
+AGENT_OPTIONS = {}
+# Brief planning + write check + terminal check đều bật.
+
+D. Base không grounding, không brief / write check / terminal check:
+AGENT_OPTIONS = {
+    "grounding_enabled": False,
+    "task_reasoning_enabled": False,
+    "terminal_check_enabled": False,
+}
+
+Mỗi lần so sánh cần giữ cùng model, subset, ASR source và cách chấm; lưu options,
+source bundle và output riêng. Chạy lại mỗi mẫu bằng ToolEnv mới, không tiếp tục
+trên environment đã bị lượt trước thay đổi.
+
+8. KẾT QUẢ ĐÃ CÓ VÀ GIỚI HẠN GÁN KẾT QUẢ CHO COMMIT
+
+Các log hiện lưu tại output_test_notbook thuộc BẢN SAU COMMIT:
+- chay_agent_output.txt
+- accuracy.txt
+- trace_log.txt
+
+Dấu hiệu nhận diện:
+Source task ledger: source-task-ledger-v1, adaptive planning: True
+Source bundle: ed474d36824873046c9a43602b5ab0960e4f826b929584780dabf4276f641b75
+Run: 20261106_072320_2679ded3/run_20261106_072456_3320c675
+Agent run: agent/20261106_072457_d99e4899
+
+Kết quả của RUN TRÊN, không gán cho nguyên trạng commit 568f8b0:
+- Exact calls + finished, có thứ tự: 2/10 = 20%.
+- Exact calls + finished, bỏ thứ tự: 2/10 = 20%.
+- Call-only exact, có thứ tự: 2/10 = 20%.
+- Call-only exact, bỏ thứ tự: 3/10 = 30%.
+- Finished: 8/10; train_0003 blocked; train_0011 checkpoint_limit.
+- Không có gold state_hash để đối chiếu trong 10 mẫu.
+
+Phân tích trace của run đó:
+- train_0003: actor đã đề xuất topup hợp lệ sau lookup, nhưng write reviewer trả
+  prose/final về việc khác còn thiếu dữ liệu; guard unfinished goals từ chối.
+- train_0011: các hành động cần thiết đã có receipt; cuối cùng bị chặn bởi cap
+  terminal check tính chung toàn mẫu. Lookup độc lập còn khác thứ tự gold.
+- Một số mẫu khác lệch exact vì thêm optional arguments, lookup thừa, nội dung
+  message khác gold hoặc chọn sai hành động. Đây không chỉ là lỗi thiếu parameter.
+
+Không có một output accuracy riêng được xác minh khớp đúng snapshot 568f8b0
+trong ba file đang lưu trên. Vì vậy không ghi 20% là accuracy của commit đó.
+Các kết quả CPU test đã báo ở các lượt khác cũng không phải accuracy Qwen thật.
+
+9. NHỮNG SỬA ĐỔI SAU COMMIT ĐANG TÁCH RIÊNG
+
+Sau mốc commit, đã thêm source task ledger, adaptive brief ngắn, sửa final riêng
+và nhánh xử lý lookup lặp. Sau khi đọc log ở mục 8, sửa tiếp:
+- Terminal budget theo tiến triển goal/slot/evidence có nguồn; giữ global caps.
+- Write review chỉ xét candidate/tiền đề; final từ reviewer không kết thúc phiên.
+- Focus schema theo goal/argument; unknown fallback về catalog.
+- Sửa semantic task rejection bị ghi nhầm category format.
+
+Marker bản mới nhất trong working tree:
+Terminal checkpoint: terminal-progress-check-v2
+Task reasoning: scoped-task-write-check-v2
+Tool focus: goal-slot-tool-focus-v1
+
+Các thay đổi này chưa commit tại thời điểm lập file. Kết quả xác minh mới nhất
+trong phiên trước: 311 CPU/scripted/integration tests passed, gồm 17 test mới
+cho các cơ chế trên. Chưa chạy Qwen thật để đo lại accuracy sau lần sửa này.
+Không dùng kết quả đó để chứng minh controller hiểu tổng quát mọi câu lệnh.
+
+10. NHỮNG GÌ NÊN GỬI KÈM KHI NHỜ ĐỌC LỖI
+
+- Commit/hash code, đúng notebook source bundle và AGENT_OPTIONS thực chạy.
+- Chế độ ASR, model, subset IDs và đường dẫn run.
+- Output mục 6, mục 8, và trace đầy đủ của mẫu lỗi ở mục 9.
+- Request hiện tại, history/context thật truyền vào model; first model input SHA.
+- Cả call bị từ chối lẫn tool_result/receipt; không chỉ status cuối.
+
+finished chỉ là trạng thái dừng đã qua guard hiện có, không tự chứng minh hoàn
+thành đúng tất cả yêu cầu. Exact call cũng có thể lệch vì argument tùy chọn,
+text tương đương hoặc thứ tự lookup độc lập; cần xem trace và tác động thực tế.
