@@ -10,6 +10,8 @@ wheels/
 .venv
 data/
 artifacts/
+output/lifemate/
+.test-scratch/
 output/
 
 # Local agent pipeline diagram
