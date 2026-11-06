@@ -2,11 +2,16 @@
 from contextlib import redirect_stdout
 from copy import deepcopy
 import ast
+import base64
 import hashlib
 import io
 import json
 from pathlib import Path
+import sys
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
+import zipfile
 
 from lifemate import agent
 from lifemate.asr.predictions import write_speech_file
@@ -409,163 +414,162 @@ class PromptIntegrityTests(unittest.TestCase):
         self.assertNotEqual(diagnostics["initial_messages"], run.messages)
 
 
+def notebook_cell(role):
+    repo = Path(__file__).resolve().parents[2]
+    notebook = json.loads((repo / "notebooks/lifemate/test_lifemate.ipynb").read_text(encoding="utf-8"))
+    cell = next(cell for cell in notebook["cells"] if cell.get("id") == role
+                or "lifemate-" + role in cell.get("metadata", {}).get("tags", []))
+    return "".join(cell["source"])
+
+
 class KaggleSourcePatchTests(unittest.TestCase):
-    def patch_source(self):
+    """The current notebook carries one immutable source archive, not Git patches."""
+
+    def bootstrap_source(self):
+        return notebook_cell("source-bootstrap")
+
+    def unloaded_modules(self):
+        return {name: None for name in sys.modules if name == "lifemate" or name.startswith("lifemate.")}
+
+    def definitions(self):
+        source = self.bootstrap_source()
+        tree = ast.parse(source)
+        install = next(node for node in tree.body if isinstance(node, ast.Assign)
+                       and any(isinstance(t, ast.Name) and t.id == "PROJECT_ROOT" for t in node.targets))
+        namespace = {}
+        exec(compile("\n".join(source.splitlines()[:install.lineno - 1]), "source-definitions", "exec"), namespace)
+        return namespace
+
+    def install(self, root, namespace=None):
+        namespace = {"SOURCE_WORK_ROOT": root} if namespace is None else namespace
+        with patch.dict(sys.modules, self.unloaded_modules()), patch.object(sys, "path", list(sys.path)), \
+             redirect_stdout(io.StringIO()):
+            exec(compile(self.bootstrap_source(), "source-bootstrap", "exec"), namespace)
+        return namespace
+
+    def test_archive_contains_exact_current_agent_pipeline_and_evaluation_source(self):
         repo = Path(__file__).resolve().parents[2]
-        nb = json.loads((repo / "notebooks/lifemate/test_lifemate.ipynb").read_text(encoding="utf-8"))
-        bootstrap_tree = ast.parse("".join(nb["cells"][4]["source"]))
-        script = next(ast.literal_eval(node.value) for node in bootstrap_tree.body
-            if isinstance(node, ast.Assign) and any(
-                isinstance(target, ast.Name) and target.id == "AGENT_CALL_FIX_SOURCE" for target in node.targets))
-        tree = ast.parse(script)
-        payload = next(node.value.args[0].value for node in tree.body
-            if isinstance(node, ast.Assign) and any(
-                isinstance(target, ast.Name) and target.id == "_AGENT_CALL_PATCH" for target in node.targets))
-        return repo, script, json.loads(payload)
+        namespace = self.definitions()
+        blob = base64.b64decode(namespace["SOURCE_ARCHIVE_BASE64"])
+        self.assertEqual(hashlib.sha256(blob).hexdigest(), namespace["SOURCE_BUNDLE_SHA256"])
+        with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+            names = set(archive.namelist())
+            expected = {p.relative_to(repo).as_posix() for p in (repo / "src/lifemate").rglob("*.py")}
+            expected.add("configs/lifemate/agent-evaluation.json")
+            self.assertEqual(names, expected)
+            self.assertIn("src/lifemate/evaluation/runner.py", names)
+            self.assertIn("src/lifemate/evaluation/experiment.py", names)
+            for name in names:
+                self.assertEqual(archive.read(name), (repo / name).read_bytes(), name)
+                self.assertEqual(hashlib.sha256(archive.read(name)).hexdigest(),
+                                 namespace["SOURCE_FILES_SHA256"][name])
+            self.assertFalse(any("state.json" in name or name.endswith(".safetensors") for name in names))
 
-    def test_pinned_kaggle_source_gets_the_exact_reviewed_fix_and_rerun_is_safe(self):
-        repo, script, payload = self.patch_source()
-        current = (repo / "src/lifemate/agent.py").read_text(encoding="utf-8")
-        baseline = current
-        for replacement in reversed(payload["replacements"]):
-            self.assertEqual(baseline.count(replacement["after"]), 1)
-            baseline = baseline.replace(replacement["after"], replacement["before"], 1)
-        self.assertEqual(hashlib.sha256(baseline.encode()).hexdigest(), payload["base_sha256"])
+    def test_same_source_setup_is_idempotent_and_preserves_preloaded_backend(self):
         with fixture() as (root, _, __, ___):
-            source = root / "src/lifemate/agent.py"
-            source.parent.mkdir(parents=True)
-            source.write_text(baseline, encoding="utf-8")
-            namespace = {"PROJECT_ROOT": root}
-            for _ in range(2):
-                with redirect_stdout(io.StringIO()):
-                    exec(compile(script, "kaggle-agent-call-fix", "exec"), namespace)
-                self.assertEqual(source.read_text(encoding="utf-8"), current)
-            self.assertEqual(namespace["AGENT_CALL_FIX_SHA256"], payload["patched_sha256"])
+            backend = object()
+            namespace = {"SOURCE_WORK_ROOT": root, "qwen_backend": backend}
+            self.install(root, namespace)
+            installed = namespace["PROJECT_ROOT"]
+            self.install(root, namespace)
+            self.assertEqual(namespace["PROJECT_ROOT"], installed)
+            self.assertIs(namespace["qwen_backend"], backend)
+            self.assertEqual((installed / "src/lifemate/agent.py").read_bytes(),
+                             (Path(__file__).resolve().parents[2] / "src/lifemate/agent.py").read_bytes())
 
-    def test_unknown_source_is_preserved_and_not_overwritten(self):
-        _, script, _ = self.patch_source()
+    def test_changed_agent_source_is_preserved_and_not_overwritten(self):
         with fixture() as (root, _, __, ___):
-            source = root / "src/lifemate/agent.py"
-            source.parent.mkdir(parents=True)
+            namespace = self.install(root)
+            source = namespace["PROJECT_ROOT"] / "src/lifemate/agent.py"
             source.write_text("# user changes\n", encoding="utf-8")
             with self.assertRaisesRegex(RuntimeError, "refusing to overwrite"):
-                exec(compile(script, "kaggle-agent-call-fix", "exec"), {"PROJECT_ROOT": root})
+                self.install(root)
             self.assertEqual(source.read_text(encoding="utf-8"), "# user changes\n")
 
-    def test_unknown_helper_is_preserved_before_the_agent_is_changed(self):
-        _, script, payload = self.patch_source()
-        baseline = payload["replacements"][0]["before"]
+    def test_changed_helper_blocks_all_missing_source_writes(self):
         with fixture() as (root, _, __, ___):
-            source = root / "src/lifemate/agent.py"
-            source.parent.mkdir(parents=True)
-            source.write_text(baseline, encoding="utf-8")
-            helper = root / "src/lifemate/workflow.py"
-            helper.write_text("# user changes\n", encoding="utf-8")
+            namespace = self.install(root)
+            source = namespace["PROJECT_ROOT"] / "src/lifemate/agent.py"
+            helper = source.parent / "pipeline/actor.py"
+            helper.write_text("# user actor changes\n", encoding="utf-8")
+            source.unlink()
             with self.assertRaisesRegex(RuntimeError, "refusing to overwrite"):
-                exec(compile(script, "kaggle-agent-call-fix", "exec"), {"PROJECT_ROOT": root})
-            self.assertEqual(source.read_text(encoding="utf-8"), baseline)
-            self.assertEqual(helper.read_text(encoding="utf-8"), "# user changes\n")
+                self.install(root)
+            self.assertFalse(source.exists())
+            self.assertEqual(helper.read_text(encoding="utf-8"), "# user actor changes\n")
 
-    def test_reviewed_helper_is_embedded_and_installed_with_verified_hash(self):
-        repo, script, payload = self.patch_source()
+    def test_corrupted_or_escaping_archive_is_rejected_before_writing(self):
+        for escape in (False, True):
+            with self.subTest(escape=escape), fixture() as (root, _, __, ___):
+                namespace = self.definitions()
+                if escape:
+                    content = io.BytesIO()
+                    with zipfile.ZipFile(content, "w") as archive:
+                        archive.writestr("../outside.py", b"test")
+                    blob = content.getvalue()
+                    namespace["SOURCE_ARCHIVE_BASE64"] = base64.b64encode(blob).decode()
+                    namespace["SOURCE_BUNDLE_SHA256"] = hashlib.sha256(blob).hexdigest()
+                    namespace["SOURCE_FILES_SHA256"] = {"../outside.py": hashlib.sha256(b"test").hexdigest()}
+                else:
+                    namespace["SOURCE_ARCHIVE_BASE64"] = base64.b64encode(b"corrupted").decode()
+                with patch.dict(sys.modules, self.unloaded_modules()), self.assertRaisesRegex(RuntimeError, "checksum"):
+                    namespace["install_embedded_source"](root / "source")
+                self.assertFalse((root / "source").exists())
+                self.assertFalse((root / "outside.py").exists())
+
+    def test_mixed_imported_source_requires_restart_without_changing_files(self):
         with fixture() as (root, _, __, ___):
-            source = root / "src/lifemate/agent.py"
-            source.parent.mkdir(parents=True)
-            source.write_text(payload["replacements"][0]["before"], encoding="utf-8")
-            with redirect_stdout(io.StringIO()):
-                exec(compile(script, "kaggle-agent-call-fix", "exec"), {"PROJECT_ROOT": root})
-            for entry in payload["files"]:
-                expected = (repo / entry["path"]).read_text(encoding="utf-8")
-                self.assertEqual((root / entry["path"]).read_text(encoding="utf-8"), expected)
-                self.assertEqual(hashlib.sha256(expected.encode()).hexdigest(), entry["sha256"])
-
-    def test_existing_kaggle_native_reply_patch_upgrades_without_reclone(self):
-        repo, script, payload = self.patch_source()
-        current = (repo / "src/lifemate/agent.py").read_text(encoding="utf-8")
-        self.assertTrue(payload["upgrades"])
-        for upgrade in payload["upgrades"]:
-            previous = current
-            for replacement in reversed(upgrade["replacements"]):
-                self.assertEqual(previous.count(replacement["after"]), 1)
-                previous = previous.replace(replacement["after"], replacement["before"], 1)
-            self.assertEqual(hashlib.sha256(previous.encode()).hexdigest(), upgrade["base_sha256"])
-            with fixture() as (root, _, __, ___):
-                source = root / "src/lifemate/agent.py"
-                source.parent.mkdir(parents=True)
-                source.write_text(previous, encoding="utf-8")
-                with redirect_stdout(io.StringIO()):
-                    exec(compile(script, "kaggle-agent-call-fix", "exec"), {"PROJECT_ROOT": root})
-                self.assertEqual(source.read_text(encoding="utf-8"), current)
-
-    def test_notebook_setup_is_self_contained_and_applied_before_importing_agent(self):
-        repo, script, payload = self.patch_source()
-        nb = json.loads((repo / "notebooks/lifemate/test_lifemate.ipynb").read_text(encoding="utf-8"))
-        bootstrap = "".join(nb["cells"][4]["source"])
-        tree = ast.parse(bootstrap)
-        embedded = next(ast.literal_eval(node.value) for node in tree.body
-            if isinstance(node, ast.Assign) and any(
-                isinstance(target, ast.Name) and target.id == "AGENT_CALL_FIX_SOURCE" for target in node.targets))
-        self.assertEqual(embedded, script)
-        self.assertEqual(payload["patched_sha256"], hashlib.sha256(
-            (repo / "src/lifemate/agent.py").read_text(encoding="utf-8").encode()).hexdigest())
-        # Inspect executable statements; embedded source can itself mention sys.path.insert.
-        setup = next(n for n in tree.body if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
-                     and isinstance(n.value.func, ast.Name) and n.value.func.id == "exec")
-        path_insert = next(n for n in tree.body if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
-                           and isinstance(n.value.func, ast.Attribute) and n.value.func.attr == "insert")
-        self.assertLess(setup.lineno, path_insert.lineno)
-        self.assertIn('"<embedded-agent-setup>"', bootstrap)
+            namespace = self.definitions()
+            other = SimpleNamespace(__file__=str(root / "other/lifemate/__init__.py"))
+            with patch.dict(sys.modules, {**self.unloaded_modules(), "lifemate": other}), self.assertRaisesRegex(RuntimeError, "Restart Session"):
+                namespace["install_embedded_source"](root / "source")
+            self.assertFalse((root / "source").exists())
 
 
 class EmbeddedTraceReaderTests(unittest.TestCase):
     def source(self):
-        repo = Path(__file__).resolve().parents[2]
-        nb = json.loads((repo / "notebooks/lifemate/test_lifemate.ipynb").read_text(encoding="utf-8"))
-        return "".join(nb["cells"][-1]["source"])
+        return notebook_cell("trace")
 
-    def write_trace(self, directory, sample_id, filename="000000.json"):
-        directory.mkdir(parents=True, exist_ok=True)
-        (directory / filename).write_text(json.dumps({
-            "submission": {"id": sample_id}, "status": "finished",
-            "trace": [{"type": "model_reply", "raw": "MODEL_REPLY_SENTINEL"},
-                      {"type": "tool_result", "result": {"ok": True}}],
-        }), encoding="utf-8")
+    def write_results(self, path, sample_id):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"id": sample_id, "status": "finished", "trace": [
+            {"type": "model_reply", "raw": "MODEL_REPLY_SENTINEL"},
+            {"type": "tool_result", "result": {"ok": True}},
+            {"type": "terminal_check", "candidate": {"type": "finish"}},
+        ]}) + "\n", encoding="utf-8")
 
-    def test_trace_cell_runs_without_report_or_model_and_finds_saved_events(self):
+    def test_trace_reader_can_open_saved_results_without_model_or_run_namespace(self):
         with fixture() as (root, _, __, ___):
-            self.write_trace(root / "run/traces", "train_0001")
-            self.write_trace(root / "run/traces", "train_0008", "000007.json")
-            namespace = {"RUN_ROOT": root}
+            saved = root / "saved/results.jsonl"
+            self.write_results(saved, "train_demo")
+            namespace = {"TRACE_RESULTS_FILE": saved, "TRACE_SAMPLE_ID": "train_demo"}
             output = io.StringIO()
             with redirect_stdout(output):
-                exec(compile(self.source(), "embedded-trace-reader", "exec"), namespace)
-            self.assertNotIn("report", namespace)
+                exec(compile(self.source(), "trace-reader", "exec"), namespace)
             self.assertNotIn("qwen_backend", namespace)
             self.assertIn("MODEL_REPLY_SENTINEL", output.getvalue())
-            self.assertIn("train_0001", output.getvalue())
-            self.assertIn("train_0008", output.getvalue())
+            self.assertIn("terminal_check", output.getvalue())
+            self.assertIn("train_demo", output.getvalue())
 
-    def test_current_report_selects_exact_run_instead_of_an_unrelated_directory(self):
+    def test_current_result_selects_exact_run_and_does_not_search_other_runs(self):
         with fixture() as (root, _, __, ___):
-            chosen = root / "current/traces"
-            self.write_trace(chosen, "train_0001")
-            self.write_trace(root / "other/traces", "UNRELATED_RUN")
-            report_path = root / "agent_report.json"
-            report_path.write_text(json.dumps({"trace_dir": str(chosen)}), encoding="utf-8")
+            chosen = root / "current/results.jsonl"
+            self.write_results(chosen, "train_demo")
+            self.write_results(root / "other/results.jsonl", "UNRELATED_RUN")
             output = io.StringIO()
             with redirect_stdout(output):
-                exec(compile(self.source(), "embedded-trace-reader", "exec"), {
-                    "RUN_ROOT": root, "LAST_AGENT_REPORT_FILE": report_path,
-                })
+                exec(compile(self.source(), "trace-reader", "exec"), {
+                    "LAST_RESULT": {"traces": str(chosen)}, "TRACE_SAMPLE_ID": "train_demo"})
             self.assertIn(str(chosen), output.getvalue())
             self.assertNotIn("UNRELATED_RUN", output.getvalue())
 
-    def test_missing_traces_print_guidance_without_a_name_error(self):
-        with fixture() as (root, _, __, ___):
-            output = io.StringIO()
-            with redirect_stdout(output):
-                exec(compile(self.source(), "embedded-trace-reader", "exec"), {"RUN_ROOT": root})
-            self.assertIn("No saved traces found", output.getvalue())
+    def test_missing_trace_configuration_prints_guidance_without_name_error(self):
+        output = io.StringIO()
+        with redirect_stdout(output):
+            exec(compile(self.source(), "trace-reader", "exec"), {})
+        self.assertIn("TRACE_SAMPLE_ID", output.getvalue())
+        with self.assertRaisesRegex(RuntimeError, "TRACE_RESULTS_FILE"):
+            exec(compile(self.source(), "trace-reader", "exec"), {"TRACE_SAMPLE_ID": "train_demo"})
 
 
 if __name__ == "__main__":

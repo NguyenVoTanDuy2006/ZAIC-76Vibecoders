@@ -182,7 +182,7 @@ class EvaluationTests(unittest.TestCase):
             self.assertEqual(metrics["call_match_micro_diagnostic_only"]["f1"], .5)
             self.assertAlmostEqual(sum(metrics["loss_decomposition"].values()), 100 - metrics["score"])
 
-    def test_missing_runtime_failure_and_empty_gold_stay_zero(self):
+    def test_timeout_submission_is_scored_but_missing_prediction_stays_zero(self):
         runtime = FakeRuntime()
         pred = prediction(runtime, calls=[])
         traces = {"a": {"status": "timeout", "submission": pred}}
@@ -190,8 +190,65 @@ class EvaluationTests(unittest.TestCase):
             write_rows(root / "pred.jsonl", [pred])
             metrics = evaluate([item("a"), item("b")], [gold(runtime, "a", []), gold(runtime, "b", [])],
                 root / "pred.jsonl", runtime, root / "out", traces=traces)
-            self.assertEqual(metrics["score"], 0)
+            self.assertEqual(metrics["score"], 50)
             self.assertEqual(metrics["counts"]["samples"], 2)
+            self.assertEqual(metrics["runtime_health"]["unhealthy_samples"], 2)
+            self.assertFalse(metrics["strict_validation_passed"])
+
+    def test_step_limit_correct_calls_and_hash_score_independently_of_runtime(self):
+        runtime = FakeRuntime()
+        pred = prediction(runtime)
+        traces = {"a": {"status": "step_limit", "submission": pred}}
+        checked = validate_prediction("a", pred, item(), runtime, traces)
+        self.assertTrue(checked["submission_valid"])
+        self.assertFalse(checked["runtime_valid"])
+        self.assertFalse(checked["valid"])  # Strict validation still reports unhealthy runs.
+        self.assertEqual(checked["submission_errors"], [])
+        self.assertEqual(checked["runtime_errors"][0]["kind"], "runtime_failure")
+        with scratch() as root:
+            write_rows(root / "pred.jsonl", [pred])
+            metrics = evaluate([item()], [gold(runtime)], root / "pred.jsonl", runtime,
+                               root / "out", traces=traces)
+            self.assertEqual(metrics["score"], 100)
+            self.assertTrue(metrics["submission_file_valid"])
+            self.assertFalse(metrics["strict_validation_passed"])
+            self.assertEqual(metrics["runtime_health"]["statuses"], {"step_limit": 1})
+            report = read_rows(root / "out/samples.jsonl")[0]
+            self.assertTrue(report["submission_valid"])
+            self.assertFalse(report["runtime_valid"])
+
+    def test_missing_trace_is_diagnostic_but_trace_submission_mismatch_is_invalid(self):
+        runtime = FakeRuntime()
+        pred = prediction(runtime)
+        checked = validate_prediction("a", pred, item(), runtime, {})
+        self.assertTrue(checked["submission_valid"])
+        self.assertFalse(checked["runtime_valid"])
+        self.assertFalse(checked["valid"])
+        self.assertEqual(checked["runtime_errors"], [{"kind": "missing_trace"}])
+        with scratch() as root:
+            write_rows(root / "pred.jsonl", [pred])
+            metrics = evaluate([item()], [gold(runtime)], root / "pred.jsonl", runtime,
+                               root / "missing", traces={})
+            self.assertEqual(metrics["score"], 100)
+            mismatched = {"a": {"status": "finished", "submission": prediction(runtime, calls=[])}}
+            metrics = evaluate([item()], [gold(runtime)], root / "pred.jsonl", runtime,
+                               root / "mismatched", traces=mismatched)
+            self.assertEqual(metrics["score"], 0)
+            details = read_rows(root / "mismatched/samples.jsonl")[0]
+            self.assertEqual(details["submission_errors"][0]["kind"], "trace_submission_mismatch")
+
+    def test_finished_with_unreproducible_hash_still_scores_zero(self):
+        runtime = FakeRuntime()
+        pred = prediction(runtime)
+        pred["state_hash"] = "0" * 64
+        traces = {"a": {"status": "finished", "submission": pred}}
+        with scratch() as root:
+            write_rows(root / "pred.jsonl", [pred])
+            metrics = evaluate([item()], [gold(runtime)], root / "pred.jsonl", runtime,
+                               root / "out", traces=traces)
+            self.assertEqual(metrics["score"], 0)
+            self.assertEqual(metrics["runtime_health"]["healthy_samples"], 1)
+            self.assertFalse(metrics["submission_file_valid"])
 
     def test_duplicate_foreign_malformed_and_duplicate_json_keys(self):
         runtime = FakeRuntime()

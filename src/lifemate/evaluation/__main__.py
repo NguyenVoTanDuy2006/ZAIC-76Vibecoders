@@ -13,6 +13,7 @@ from .matching import MatchConvention
 from .runner import run
 from .runtime import OfficialRuntime, build_gold
 from .validate import load_traces, read_predictions, validate_prediction
+from .selection import select_rows
 
 
 def parser():
@@ -30,6 +31,7 @@ def parser():
             p.add_argument("--split", choices=("validation", "local_test"), default="validation")
             p.add_argument("--allow-local-test", action="store_true")
             p.add_argument("--frozen", type=Path)
+            p.add_argument("--selection", type=Path, help="Immutable subset manifest shared with inference")
         if name in ("validate", "evaluate"):
             p.add_argument("--predictions", required=True, type=Path)
             p.add_argument("--traces", type=Path, help="results.jsonl or traces directory; autodetected next to predictions")
@@ -69,6 +71,7 @@ def _selected(args):
         relative = f"{args.split}/{name}"
         if sha256(folder / name) != integrity[relative]:
             raise ValueError(f"Prepared artifact changed: {relative}")
+    items = select_rows(items, folder / "manifest.json", args.selection)
     return folder, items, runtime
 
 
@@ -89,11 +92,12 @@ def main(argv=None):
         elif args.command == "run":
             print(json.dumps(run(args.bundle, args.split, args.data_root, args.speech, args.output,
                 config_path=args.config, allow_local_test=args.allow_local_test,
-                frozen=args.frozen, oracle=args.oracle_text)))
+                frozen=args.frozen, oracle=args.oracle_text, selection_path=args.selection)))
         else:
             folder, items, runtime = _selected(args)
             if args.command == "build-gold":
-                gold = build_gold(read_rows(folder / "references.jsonl"), runtime, args.output)
+                references = index_rows(read_rows(folder / "references.jsonl"))
+                gold = build_gold([references[row["id"]] for row in items], runtime, args.output)
                 print(json.dumps({"verified_gold": len(gold)}))
                 return 0
             trace_path = args.traces
@@ -115,10 +119,13 @@ def main(argv=None):
                 write_json(args.output / "validation_summary.json", summary)
                 print(json.dumps({k: v for k, v in summary.items() if k != "runtime"}))
                 return 0 if valid else 1
-            gold = [runtime.reference(row) for row in read_rows(folder / "references.jsonl")]
+            references = index_rows(read_rows(folder / "references.jsonl"))
+            gold = [runtime.reference(references[row["id"]]) for row in items]
             result = evaluate(items, gold, args.predictions, runtime, args.output, traces=traces,
                               convention=MatchConvention(fuzzy_threshold=args.fuzzy_threshold))
             write_json(args.output / "selection.json", {"split": args.split,
+                "ids": [row["id"] for row in items],
+                "selection_sha256": sha256(args.selection) if args.selection else None,
                 "manifest_sha256": sha256(folder / "manifest.json"), "references_sha256": sha256(folder / "references.jsonl")})
             print(json.dumps({"score": result["score"], "label": result["score_label"],
                               "counts": result["counts"], "file_issues": result["prediction_file_issues"]}))

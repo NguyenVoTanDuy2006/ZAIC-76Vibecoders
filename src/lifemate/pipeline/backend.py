@@ -69,9 +69,11 @@ def load_qwen_backend(model_config=None, agent_config=None):
     if not torch.cuda.is_available() or gpu_index >= torch.cuda.device_count():
         raise RuntimeError(f"Không có GPU {model_config.device}; cần CUDA để nạp bản Qwen FP16 này")
     tokenizer = AutoTokenizer.from_pretrained(
-        model_config.model_source, local_files_only=model_config.local_files_only)
+        model_config.model_source, local_files_only=model_config.local_files_only,
+        revision=model_config.revision)
     model = AutoModelForCausalLM.from_pretrained(
         model_config.model_source, local_files_only=model_config.local_files_only,
+        revision=model_config.revision,
         dtype=torch.float16, device_map={"": gpu_index}, attn_implementation="sdpa")
     model.eval()
     if not hasattr(model.generation_config, "prefill_chunk_size"):

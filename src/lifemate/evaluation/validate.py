@@ -52,40 +52,61 @@ def load_traces(path):
 
 
 def validate_prediction(sample_id, prediction, item, runtime, traces=None):
-    errors = []
-    report = {"id": sample_id, "valid": False, "errors": errors, "schema_errors": [],
-              "replay": None, "trace": None, "trace_status_measured": traces is not None}
+    """Check submission integrity independently of diagnostic runtime health.
+
+    BTC scores the submitted calls/hash, not the internal Agent status. ``valid``
+    remains the strict validation result for callers checking run health;
+    ``submission_valid`` is the integrity gate used by the local score.
+    """
+    errors, submission_errors, runtime_errors = [], [], []
+    report = {"id": sample_id, "valid": False, "submission_valid": False,
+              "errors": errors, "submission_errors": submission_errors,
+              "runtime_errors": runtime_errors, "runtime_valid": None,
+              "schema_errors": [], "replay": None, "trace": None,
+              "trace_status_measured": traces is not None}
+
+    def submission_error(error):
+        submission_errors.append(error)
+        errors.append(error)
+
+    def finish():
+        report["submission_valid"] = not submission_errors and report["replay"] is not None
+        report["valid"] = report["submission_valid"] and not runtime_errors
+        return report
+
     if traces is not None:
         trace = traces.get(sample_id)
         report["trace"] = trace
         if trace is None:
-            errors.append({"kind": "missing_trace"})
+            runtime_errors.append({"kind": "missing_trace"})
         elif trace.get("status") not in SUCCESS_STATUSES:
-            errors.append({"kind": "runtime_failure", "status": trace.get("status"), "error": trace.get("error")})
+            runtime_errors.append({"kind": "runtime_failure", "status": trace.get("status"), "error": trace.get("error")})
+        errors.extend(runtime_errors)
+        report["runtime_valid"] = not runtime_errors
     if prediction is None:
-        errors.append({"kind": "missing_prediction"})
-        return report
+        submission_error({"kind": "missing_prediction"})
+        return finish()
     if prediction.get("_invalid"):
-        errors.append({"kind": prediction["_invalid"]})
-        return report
+        submission_error({"kind": prediction["_invalid"]})
+        return finish()
     if set(prediction) != {"id", "tool_calls", "state_hash"}:
-        errors.append({"kind": "invalid_fields", "fields": sorted(prediction)})
+        submission_error({"kind": "invalid_fields", "fields": sorted(prediction)})
     calls = prediction.get("tool_calls")
     if not isinstance(calls, list):
-        errors.append({"kind": "tool_calls_not_list"})
+        submission_error({"kind": "tool_calls_not_list"})
     elif len(calls) > 1000:
-        errors.append({"kind": "too_many_calls", "limit": 1000})
+        submission_error({"kind": "too_many_calls", "limit": 1000})
     else:
         for index, call in enumerate(calls):
             error = call_error(call)
             if error:
-                errors.append({"kind": "invalid_call", "call_index": index, "error": error})
+                submission_error({"kind": "invalid_call", "call_index": index, "error": error})
     if not isinstance(prediction.get("state_hash"), str) or not re.fullmatch(r"[a-f0-9]{64}", prediction["state_hash"]):
-        errors.append({"kind": "invalid_state_hash_format"})
-    if any(e["kind"] not in ("missing_trace", "runtime_failure") for e in errors):
-        return report
+        submission_error({"kind": "invalid_state_hash_format"})
+    if submission_errors:
+        return finish()
     if traces is not None and report["trace"] is not None and report["trace"].get("submission") != prediction:
-        errors.append({"kind": "trace_submission_mismatch"})
+        submission_error({"kind": "trace_submission_mismatch"})
     allowed = {t for app in item["context"]["installed_apps"].values() for t in app["tools"]} | {"sys.ask_missing_info"}
     report["schema_errors"] = [{"call_index": i, "name": call["name"], "error": error}
         for i, call in enumerate(calls)
@@ -95,11 +116,10 @@ def validate_prediction(sample_id, prediction, item, runtime, traces=None):
         replay = runtime.replay(sample_id, calls)
         report["replay"] = replay
         if replay["tool_calls"] != calls:
-            errors.append({"kind": "replay_call_log_mismatch"})
+            submission_error({"kind": "replay_call_log_mismatch"})
         if replay["state_hash"] != prediction["state_hash"]:
-            errors.append({"kind": "submitted_hash_not_reproducible", "submitted": prediction["state_hash"],
+            submission_error({"kind": "submitted_hash_not_reproducible", "submitted": prediction["state_hash"],
                            "replayed": replay["state_hash"]})
     except Exception as error:
-        errors.append({"kind": "replay_failure", "error": f"{type(error).__name__}: {error}"})
-    report["valid"] = not errors
-    return report
+        submission_error({"kind": "replay_failure", "error": f"{type(error).__name__}: {error}"})
+    return finish()

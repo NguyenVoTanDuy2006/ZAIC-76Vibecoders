@@ -4,9 +4,9 @@
   "weights_fingerprint": null,
   "quantization": "fp16",
   "device": "cuda:0",
-  "prompt_sha256": "11f3365885dc7d155a7f4fc38b9d20c3db85a2c39677cff00139f42a8a3a62ba",
+  "prompt_sha256": "9a283260c05f8c76580c2562635a893a73d7c7212e72c569093f14cd755a2488",
   "generation": {
-    "max_steps": 12,
+    "max_steps": 48,
     "max_calls": 12,
     "max_invalid_replies": 2,
     "max_context_tokens": 16384,

@@ -2,21 +2,18 @@
 import ast
 from contextlib import contextmanager, redirect_stdout
 from copy import deepcopy
-from datetime import datetime, timezone
 import io
 import json
-import os
 from pathlib import Path
 import shutil
 from types import SimpleNamespace
-import textwrap
 import unittest
 from unittest.mock import Mock, patch
 import uuid
-import zipfile
 
 from lifemate import agent, train_eval
 from lifemate.asr.predictions import read_jsonl
+from test_agent_calls import notebook_cell
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -453,164 +450,164 @@ class TrainEvaluationTests(unittest.TestCase):
             self.assertIs(run.call_args.kwargs["agent_config"], config)
             self.assertTrue(Path(result["test_submition_path"]).is_file())
 
-    def test_notebook_embeds_helpers_and_reuses_the_explicit_qwen_variable(self):
-        nb = json.loads((REPO / "notebooks/lifemate/test_lifemate.ipynb").read_text(encoding="utf-8"))
-        embedded, inference_found = None, False
-        for index, cell in enumerate(nb["cells"]):
-            if cell["cell_type"] != "code":
-                continue
-            self.assertEqual(cell["outputs"], [])
-            self.assertIsNone(cell["execution_count"])
-            tree = ast.parse("".join(cell["source"]))
-            compile(tree, f"notebook:{index}", "exec")
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "TRAIN_EVAL_SOURCE" for t in node.targets):
-                    embedded = ast.literal_eval(node.value)
-                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "run_train_agent":
-                    inference_found = True
-                    backend = next(kw.value for kw in node.keywords if kw.arg == "backend")
-                    self.assertIsInstance(backend, ast.Name)
-                    self.assertEqual(backend.id, "qwen_backend")
-        self.assertEqual(embedded, (REPO / "src/lifemate/train_eval.py").read_text(encoding="utf-8"))
-        self.assertTrue(inference_found)
+    def test_notebook_embeds_current_source_and_passes_plan_and_backend_to_evaluation(self):
+        notebook = json.loads((REPO / "notebooks/lifemate/test_lifemate.ipynb").read_text(encoding="utf-8"))
+        for index, cell in enumerate(notebook["cells"]):
+            if cell["cell_type"] == "code":
+                self.assertEqual(cell["outputs"], [])
+                self.assertIsNone(cell["execution_count"])
+                compile("".join(cell["source"]), f"notebook:{index}", "exec")
+        source = notebook_cell("run")
+        calls = [n for n in ast.walk(ast.parse(source)) if isinstance(n, ast.Call)
+                 and isinstance(n.func, ast.Name) and n.func.id == "run_experiment"]
+        self.assertEqual(len(calls), 1)
+        self.assertIsInstance(calls[0].args[0], ast.Name)
+        self.assertEqual(calls[0].args[0].id, "plan")
+        backend = next(kw.value for kw in calls[0].keywords if kw.arg == "backend")
+        self.assertIsInstance(backend, ast.Name)
+        self.assertEqual(backend.id, "qwen_backend")
+        preflight = notebook_cell("preflight")
+        self.assertIn("prepare_experiment", preflight)
+        self.assertNotIn("load_qwen_backend", preflight)
+        self.assertNotIn("snapshot_download", preflight)
 
 
 class KaggleEnvironmentTests(unittest.TestCase):
-    def execute_environment_cell(self, root, probe_returncode=0, backend_loaded=False):
-        nb = json.loads((REPO / "notebooks/lifemate/test_lifemate.ipynb").read_text(encoding="utf-8"))
-        source = "".join(nb["cells"][8]["source"])
-        namespace = {
-            "os": os, "sys": SimpleNamespace(executable="/usr/bin/python3"),
-            "subprocess": SimpleNamespace(run=Mock(return_value=SimpleNamespace(returncode=probe_returncode))),
-            "textwrap": textwrap, "PROJECT_ROOT": REPO, "SCRATCH_ROOT": root,
-            "HF_TOKEN_SECRET_NAME": None,
-            "checked": Mock(),
-        }
+    def execute_environment_cell(self, versions, *, backend_loaded=False, imported=False, install=True):
+        source = notebook_cell("dependencies")
+        namespace = {"INSTALL_DEPENDENCIES": install}
         if backend_loaded:
             namespace["qwen_backend"] = object()
-        fake_torch = SimpleNamespace(__version__="2.6.0", cuda=SimpleNamespace(
-            is_available=lambda: True, device_count=lambda: 1, get_device_name=lambda index: "test-GPU"))
-        with patch.dict("sys.modules", {"torch": fake_torch,
-                        "transformers": SimpleNamespace(__version__="5.17.0")}), \
-             patch.dict(os.environ), redirect_stdout(io.StringIO()):
-            exec(compile(source, "kaggle-environment-cell", "exec"), namespace)
-        return namespace
+        with patch("importlib.metadata.version", side_effect=lambda name: versions[name]), \
+             patch("subprocess.check_call") as install_call, \
+             patch.dict("sys.modules", {"transformers": SimpleNamespace()} if imported else {}), \
+             redirect_stdout(io.StringIO()):
+            exec(compile(source, "kaggle-dependencies", "exec"), namespace)
+        return install_call
 
-    def test_pip_installs_into_current_kernel_without_creating_a_venv(self):
-        with workspace() as root, patch("urllib.request.urlretrieve") as download:
-            namespace = self.execute_environment_cell(root)
-            commands = [call.args[0] for call in namespace["checked"].call_args_list]
-            self.assertFalse(any("ensurepip" in command for command in commands))
-            self.assertFalse(any("venv" in command for command in commands))
-            self.assertEqual(commands[0][:3], ["/usr/bin/python3", "-m", "pip"])
-            self.assertNotIn("--python", commands[0])
-            download.assert_not_called()
+    def valid_versions(self):
+        return {"torch": "2.6.0", "transformers": "5.17.0", "accelerate": "1.12.0", "huggingface-hub": "1.5.0"}
 
-    def test_missing_kernel_pip_uses_official_zipapp(self):
-        with workspace() as root:
-            def download_zip(url, filename):
-                self.assertEqual(url, "https://bootstrap.pypa.io/pip/pip.pyz")
-                with zipfile.ZipFile(filename, "w") as archive:
-                    archive.writestr("__main__.py", "# offline test fixture")
-            with patch("urllib.request.urlretrieve", side_effect=download_zip) as download:
-                namespace = self.execute_environment_cell(root, probe_returncode=1)
-            download.assert_called_once()
-            self.assertTrue(zipfile.is_zipfile(root / "pip.pyz"))
-            install = namespace["checked"].call_args_list[0].args[0]
-            self.assertEqual(install[:2], ["/usr/bin/python3", str(root / "pip.pyz")])
-            self.assertNotIn("--python", install)
+    def test_compatible_kernel_does_not_reinstall_dependencies(self):
+        install = self.execute_environment_cell(self.valid_versions())
+        install.assert_not_called()
 
-    def test_valid_cached_pip_zipapp_does_not_download_again(self):
-        with workspace() as root, patch("urllib.request.urlretrieve") as download:
-            with zipfile.ZipFile(root / "pip.pyz", "w") as archive:
-                archive.writestr("__main__.py", "# offline test fixture")
-            self.execute_environment_cell(root, probe_returncode=1)
-            download.assert_not_called()
+    def test_mismatched_dependencies_install_only_in_current_kernel_without_torch_or_venv(self):
+        versions = {**self.valid_versions(), "transformers": "4.57.6"}
+        install = self.execute_environment_cell(versions)
+        install.assert_called_once()
+        command = install.call_args.args[0]
+        import sys
+        self.assertEqual(command[:3], [sys.executable, "-m", "pip"])
+        self.assertFalse(any("torch" in value or "venv" in value for value in command[3:]))
+        self.assertIn("transformers==5.17.0", command)
 
-    def test_incomplete_download_stops_before_dependency_install(self):
-        with workspace() as root:
-            def broken_download(url, filename):
-                Path(filename).write_bytes(b"incomplete")
-            with patch("urllib.request.urlretrieve", side_effect=broken_download):
-                with self.assertRaisesRegex(RuntimeError, "incomplete"):
-                    self.execute_environment_cell(root, probe_returncode=1)
+    def test_loaded_model_prevents_in_place_dependency_changes(self):
+        versions = {**self.valid_versions(), "transformers": "4.57.6"}
+        with patch("subprocess.check_call") as install, self.assertRaisesRegex(RuntimeError, "Restart Session"):
+            self.execute_environment_cell(versions, backend_loaded=True)
+        install.assert_not_called()
+        self.execute_environment_cell(self.valid_versions(), backend_loaded=True).assert_not_called()
 
-    def test_environment_cell_does_not_reinstall_packages_with_a_loaded_model(self):
-        with workspace() as root:
-            namespace = self.execute_environment_cell(root, backend_loaded=True)
-            namespace["checked"].assert_not_called()
+    def test_imported_library_requires_restart_before_version_changes(self):
+        versions = {**self.valid_versions(), "transformers": "4.57.6"}
+        with self.assertRaisesRegex(RuntimeError, "Restart Session"):
+            self.execute_environment_cell(versions, imported=True)
+
+    def test_disabled_installation_reports_incompatible_environment(self):
+        versions = {**self.valid_versions(), "transformers": "4.57.6"}
+        with self.assertRaisesRegex(RuntimeError, "INSTALL_DEPENDENCIES"):
+            self.execute_environment_cell(versions, install=False)
 
 
 class DirectQwenCellTests(unittest.TestCase):
-    def notebook(self):
-        return json.loads((REPO / "notebooks/lifemate/test_lifemate.ipynb").read_text(encoding="utf-8"))
-
-    def test_default_is_ten_and_load_cell_only_loads_once(self):
-        nb = self.notebook()
+    def model_namespace(self, root):
         namespace = {}
-        exec("".join(nb["cells"][2]["source"]), namespace)
-        self.assertEqual(namespace["SAMPLE_COUNT"], 10)
+        exec(notebook_cell("config"), namespace)
+        config = root / "config.json"
+        config.write_text(json.dumps({"model_source": "local-test-checkpoint", "model_revision": "fixed-sha",
+            "device": "cuda:0", "generation": {"max_steps": 48, "max_calls": 12}}), encoding="utf-8")
+        namespace.update({"json": json, "plan": {"config": str(config), "selected_ids": ["example"]},
+                          "ALLOW_MODEL_DOWNLOADS": False})
+        return namespace
+
+    def execute_model_cell(self, namespace):
+        fake_torch = SimpleNamespace(__version__="2.6.0", cuda=SimpleNamespace(
+            is_available=lambda: True, get_device_name=lambda index: "test-GPU"))
+        fake_transformers = SimpleNamespace(__version__="5.17.0",
+            GenerationConfig=lambda: SimpleNamespace(prefill_chunk_size=512))
+        with patch.dict("sys.modules", {"torch": fake_torch, "transformers": fake_transformers}), \
+             redirect_stdout(io.StringIO()):
+            exec(notebook_cell("model"), namespace)
+
+    def test_default_is_ten_and_matching_source_revision_device_load_only_once(self):
         with workspace() as root:
-            model = root / "model"
-            model.mkdir()
-            namespace.update({"MODEL_SOURCE": str(model), "SCRATCH_ROOT": root})
+            namespace = self.model_namespace(root)
+            self.assertEqual(namespace["SAMPLE_COUNT"], 10)
+            self.assertEqual(namespace["ASR_MODE"], "oracle_text")
             backend = object()
-            with patch.object(agent, "load_qwen_backend", return_value=backend) as load, redirect_stdout(io.StringIO()):
-                exec("".join(nb["cells"][10]["source"]), namespace)
-                exec("".join(nb["cells"][10]["source"]), namespace)
+            with patch.object(agent, "load_qwen_backend", return_value=backend) as load:
+                self.execute_model_cell(namespace)
+                self.execute_model_cell(namespace)
             load.assert_called_once()
+            config = load.call_args.args[0]
+            self.assertEqual(config.revision, "fixed-sha")
+            self.assertTrue(config.local_files_only)
             self.assertIs(namespace["qwen_backend"], backend)
+            self.assertEqual(namespace["loaded_qwen_key"], ("local-test-checkpoint", "fixed-sha", "cuda:0"))
 
-    def test_two_agent_cell_runs_reuse_model_and_create_fresh_environments(self):
+    def test_model_cell_refuses_a_different_loaded_checkpoint_without_reloading(self):
         with workspace() as root:
-            data, _ = corpus(root)
-            speech = train_eval.create_oracle_asr(data, root / "oracle.jsonl", 2)
-            created = []
-
-            class Env:
-                def __init__(self, split, cid, root):
-                    created.append(cid)
-                def get_tool_calls(self):
-                    return []
-                def get_state_hash(self):
-                    return "test-hash"
-
-            class Backend:
-                def __init__(self):
-                    self.generations = 0
-                def generate(self, *args, **kwargs):
-                    self.generations += 1
-                    return agent.ModelReply("<final>Done</final>")
-
-            backend = Backend()
-            namespace = {"Path": Path, "datetime": datetime, "timezone": timezone, "uuid": uuid,
-                "json": json, "train_eval": train_eval, "qwen_backend": backend,
-                "AGENT_OPTIONS": {"workflow_enabled": False},
-                "qwen_model_config": agent.ModelLoadConfig(model_source="local-test-model"),
-                "loaded_qwen_key": ("local-test-model", "cuda:0"), "MODEL_SOURCE": "local-test-model",
-                "DEVICE": "cuda:0", "SAMPLE_COUNT": 2, "DATA_ROOT": data, "RUN_ROOT": root / "runs",
-                "prepared": {"asr_file": str(speech)}, "ASR_MODE": "oracle_train_audio_text", "source_commit": "test-commit"}
-            source = "".join(self.notebook()["cells"][12]["source"])
-            with patch.object(agent, "get_tool_env_factory", return_value=Env), \
-                 patch.object(agent, "load_qwen_backend", side_effect=AssertionError("Must not reload Qwen")) as load, \
-                 redirect_stdout(io.StringIO()):
-                exec(source, namespace)
-                first_report = namespace["LAST_AGENT_REPORT_FILE"]
-                exec(source, namespace)
-                second_report = namespace["LAST_AGENT_REPORT_FILE"]
+            namespace = self.model_namespace(root)
+            namespace.update(qwen_backend=object(), loaded_qwen_key=("other-model", None, "cuda:0"))
+            with patch.object(agent, "load_qwen_backend") as load, self.assertRaisesRegex(RuntimeError, "restart"):
+                self.execute_model_cell(namespace)
             load.assert_not_called()
-            self.assertIs(namespace["qwen_backend"], backend)
-            self.assertEqual(backend.generations, 4)
-            self.assertEqual(created, ["train_0001", "train_0226", "train_0001", "train_0226"])
-            self.assertNotEqual(first_report, second_report)
-            self.assertTrue(first_report.is_file() and second_report.is_file())
 
-    def test_agent_cell_rejects_a_missing_model_without_background_processes(self):
-        source = "".join(self.notebook()["cells"][12]["source"])
+    def test_run_cell_uses_the_preloaded_backend_and_exact_prepared_plan(self):
+        with workspace() as root:
+            namespace = self.model_namespace(root)
+            backend = object()
+            namespace.update(qwen_backend=backend,
+                loaded_qwen_key=("local-test-checkpoint", "fixed-sha", "cuda:0"))
+            reports = [{"summary_path": str(root / "first.json")}, {"summary_path": str(root / "second.json")}]
+            with patch("lifemate.evaluation.experiment.run_experiment", side_effect=reports) as run, \
+                 patch.object(agent, "load_qwen_backend", side_effect=AssertionError("Must not reload")) as load, \
+                 redirect_stdout(io.StringIO()):
+                exec(notebook_cell("run"), namespace)
+                self.assertEqual(namespace["LAST_RESULT"], reports[0])
+                second = {**namespace["plan"], "selected_ids": ["other-example"]}
+                namespace["plan"] = second
+                exec(notebook_cell("run"), namespace)
+            self.assertEqual(run.call_count, 2)
+            self.assertIs(run.call_args.args[0], second)
+            self.assertIs(run.call_args.kwargs["backend"], backend)
+            self.assertIs(namespace["qwen_backend"], backend)
+            self.assertEqual(namespace["LAST_RESULT"], reports[1])
+            load.assert_not_called()
+
+    def test_run_cell_clears_previous_report_when_new_run_fails(self):
+        with workspace() as root:
+            namespace = self.model_namespace(root)
+            namespace.update(qwen_backend=object(), loaded_qwen_key=("local-test-checkpoint", "fixed-sha", "cuda:0"),
+                             LAST_RESULT={"summary_path": "previous-output.json"})
+            with patch("lifemate.evaluation.experiment.run_experiment", side_effect=ValueError("fixture failure")), \
+                 self.assertRaisesRegex(ValueError, "fixture failure"):
+                exec(notebook_cell("run"), namespace)
+            self.assertIsNone(namespace["LAST_RESULT"])
+
+    def test_run_cell_rejects_missing_or_mismatched_model_before_inference(self):
+        source = notebook_cell("run")
         self.assertNotIn("subprocess", source)
         self.assertNotIn("load_qwen_backend", source)
         with self.assertRaisesRegex(RuntimeError, "cell 5"):
             exec(source, {})
+        with workspace() as root:
+            namespace = self.model_namespace(root)
+            namespace.update(qwen_backend=object(), loaded_qwen_key=("wrong-model", None, "cuda:0"))
+            with patch("lifemate.evaluation.experiment.run_experiment") as run, self.assertRaisesRegex(RuntimeError, "Model"):
+                exec(source, namespace)
+            run.assert_not_called()
 
 
 if __name__ == "__main__":

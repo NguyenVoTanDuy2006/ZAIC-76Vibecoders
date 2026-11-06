@@ -78,9 +78,12 @@ class ModelLoadConfig:
     model_source: str = "Qwen/Qwen3-4B-Instruct-2507"
     device: str = "cuda:0"
     local_files_only: bool = True
+    revision: str | None = None
 
     def __post_init__(self):
         if not isinstance(self.model_source, str) or not self.model_source.strip():
             raise ValueError("model_source phải là model ID hoặc thư mục model local")
+        if self.revision is not None and (not isinstance(self.revision, str) or not self.revision.strip()):
+            raise ValueError("revision phải là tên phiên bản/commit không rỗng hoặc None")
         if not re.fullmatch(r"cuda:\d+", self.device):
             raise ValueError("Bản FP16 này cần device dạng cuda:0 hoặc cuda:1")

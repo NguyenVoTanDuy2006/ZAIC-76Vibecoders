@@ -25,7 +25,7 @@ Phần nối đã có test; suy luận ASR/Qwen thật trên GPU chưa được 
 | Đề xuất ngắn, metadata do code cấp và lỗi cấu trúc của planner | [src/lifemate/pipeline/proposals.py](src/lifemate/pipeline/proposals.py) |
 | Trạng thái/version, predicate và policy phục hồi | [src/lifemate/pipeline/](src/lifemate/pipeline/) |
 | Workflow legacy, catalog routing và protocol versions | [src/lifemate/workflow.py](src/lifemate/workflow.py) |
-| Kaggle thử nghiệm, metrics và so sánh từng phần cải thiện | [notebooks/lifemate/test_lifemate.ipynb](notebooks/lifemate/test_lifemate.ipynb) |
+| Kaggle: Agent → ToolEnv → validation/evaluation, notebook tự chứa source | [notebooks/lifemate/test_lifemate.ipynb](notebooks/lifemate/test_lifemate.ipynb), [hướng dẫn](docs/lifemate/kaggle-unified-evaluation.md) |
 | Hiểu từng hàm, định dạng và cách bàn giao | [docs/lifemate/README.md](docs/lifemate/README.md) |
 | Validate/evaluate agent, chia dev/test và xem lỗi tool/arguments/state | [docs/lifemate/agent-evaluation.md](docs/lifemate/agent-evaluation.md) |
 

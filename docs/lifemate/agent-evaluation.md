@@ -1,5 +1,10 @@
 # Validate và evaluate agents
 
+Để chạy thử trên Kaggle bằng một notebook tự chứa source Agent và evaluator,
+dùng [test_lifemate.ipynb](../../notebooks/lifemate/test_lifemate.ipynb) theo
+[hướng dẫn luồng thống nhất](kaggle-unified-evaluation.md). Notebook chọn 1/10/toàn
+validation, dùng cùng selection cho inference và chấm điểm, giữ nguyên AgentSession.
+
 Phần này thực hiện yêu cầu cập nhật trong chat: **chỉ thêm validation/evaluation
 cho agent**. ASR của đội đã có validate/evaluate; agent đọc file text ASR có sẵn,
 không tính WER/CER, không huấn luyện hoặc fine-tune ASR/LLM.
@@ -140,7 +145,9 @@ Không có lệnh oracle trên local test.
 
 `results.jsonl` hoặc `traces/` cạnh predictions được tự nhận; có thể chỉ định
 `--traces`. Trace timeout/crash/step limit hoặc thiếu trace trong một bộ trace
-được cung cấp đều làm mẫu không hợp lệ. Nếu chỉ cấp submission ngoài không có
+được cung cấp làm kiểm tra runtime nghiêm ngặt thất bại. Điểm submission vẫn
+dựa trên calls/hash thực tế nếu hợp lệ và replay được; runtime được báo riêng.
+Nếu chỉ cấp submission ngoài không có
 trace, báo `trace_coverage_checked=false`: không thể suy ra trạng thái runtime
 từ một danh sách rỗng. Luồng nội bộ nên luôn giữ trace cạnh prediction.
 
@@ -164,7 +171,8 @@ Với `K` submitted calls, `G` gold calls, `M` số cặp ghép tối đa và `H
 G = 0: score = 1 nếu K = 0, ngược lại 0
 G > 0: C = 2*M/(K+G); score = H*C
 FinalScore = 100 * mean(score trên toàn bộ IDs dự kiến)
-Prediction thiếu/sai cấu trúc/runtime failure/hash không replay được: score = 0
+Prediction thiếu/sai cấu trúc/hash không replay được: score = 0
+Runtime stop status được báo riêng, không tự ép điểm submission về 0
 ```
 
 Matcher tìm maximum-cardinality bipartite matching, cùng tên tool và arguments;
@@ -178,6 +186,14 @@ nghiệm local được ghi vào report. Tài liệu BTC chưa chỉ rõ tokeniz
 missing/extra args và nested values; chưa có scorer chính thức để đối chiếu.
 Do đó kết quả luôn ghi **`local_estimate_of_competition_score`**, cùng convention
 và `official_scorer_verified=false`; không tuyên bố khớp tuyệt đối leaderboard.
+File `docs/requirement/evaluation.md` hiện ghi ngưỡng `>= 0.6` và thiếu hệ số 2,
+khác hình tính điểm người dùng cung cấp. Quy ước local ở trên được giữ rõ phiên
+bản cho đến khi đối chiếu nguồn chính thức, không tự thay đổi khi chạy.
+
+Subset dùng file selection riêng, không sửa integrity của bundle gốc. Truyền
+cùng `--selection <selection.json>` cho `run`, `validate` và `evaluate`; nếu
+không truyền, lệnh xử lý toàn logical split. Không chấm 10 prediction trên mẫu
+số toàn validation. Notebook tự tạo selection qua `evaluation.selection`.
 
 ## Đọc lỗi và ưu tiên sửa
 
