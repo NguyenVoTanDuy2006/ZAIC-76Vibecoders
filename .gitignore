@@ -11,3 +11,12 @@ wheels/
 data/
 artifacts/
 output/
+
+# Local agent pipeline diagram
+/pipeline_agent.md
+
+.output_test_notbook
+
+# Local notebook run logs and traces
+/output_test_notbook/
+/output_test_notebook/

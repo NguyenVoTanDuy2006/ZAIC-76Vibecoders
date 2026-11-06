@@ -13,7 +13,18 @@ Phần nối đã có test; suy luận ASR/Qwen thật trên GPU chưa được 
 |---|---|
 | Sinh văn bản cho yêu cầu hiện tại và các lượt người dùng trong lịch sử | [notebooks/lifemate/predict_asr.py](notebooks/lifemate/predict_asr.py) |
 | Chạy agent từ text ASR | [notebooks/lifemate/run_agent.ipynb](notebooks/lifemate/run_agent.ipynb) |
-| Sửa hướng dẫn cho model, quyết định gọi công cụ, vòng lặp hoặc nối ToolEnv | [src/lifemate/agent.py](src/lifemate/agent.py) |
+| Vòng lặp điều phối, public API và hook ToolEnv | [src/lifemate/agent.py](src/lifemate/agent.py) |
+| Sửa từng pha: input, prompt, backend, plan/review, actor, execution, output | [src/lifemate/pipeline/](src/lifemate/pipeline/) |
+| Giao thức mặc định BTC, pending call và receipts do code quản lý | [src/lifemate/pipeline/protocol.py](src/lifemate/pipeline/protocol.py) |
+| Input theo nguồn, chuỗi chữ số và từ phân biệt đối tượng | [src/lifemate/pipeline/grounding.py](src/lifemate/pipeline/grounding.py) |
+| Số tiền có nguồn và checkpoint trước final/ask | [quantities.py](src/lifemate/pipeline/quantities.py), [checkpoint.py](src/lifemate/pipeline/checkpoint.py) |
+| Tách việc, nguồn arguments, phụ thuộc và kiểm tra trước write | [task_reasoning.py](src/lifemate/pipeline/task_reasoning.py) |
+| Feedback sửa tool call theo catalog, giữ nguyên giao thức BTC | [src/lifemate/pipeline/call_repair.py](src/lifemate/pipeline/call_repair.py) |
+| Controller lịch sử recovery-v3 để đối chiếu khi chọn rõ | [src/lifemate/pipeline/adaptive.py](src/lifemate/pipeline/adaptive.py) |
+| Đề xuất ngắn, metadata do code cấp và lỗi cấu trúc của planner | [src/lifemate/pipeline/proposals.py](src/lifemate/pipeline/proposals.py) |
+| Trạng thái/version, predicate và policy phục hồi | [src/lifemate/pipeline/](src/lifemate/pipeline/) |
+| Workflow legacy, catalog routing và protocol versions | [src/lifemate/workflow.py](src/lifemate/workflow.py) |
+| Kaggle thử nghiệm, metrics và so sánh từng phần cải thiện | [notebooks/lifemate/test_lifemate.ipynb](notebooks/lifemate/test_lifemate.ipynb) |
 | Hiểu từng hàm, định dạng và cách bàn giao | [docs/lifemate/README.md](docs/lifemate/README.md) |
 
 ### Cấu trúc repo
@@ -28,7 +39,10 @@ ZAIC-76Vibecoders/
 │       └── run_agent.ipynb            # Bước 2: cấu hình và gọi agent; không sao chép mã xử lý
 ├── src/
 │   ├── lifemate/                      # Mã tích hợp ASR → agent
-│   │   ├── agent.py                   # Nạp Qwen, tạo đầu vào, chọn/gọi công cụ, xuất kết quả
+│   │   ├── agent.py                   # Public API, single-session coordinator và hook ToolEnv
+│   │   ├── pipeline/                  # Các module xử lý từng pha; bản đồ ở docs/lifemate/README.md
+│   │   ├── workflow.py                # Protocol versions, catalog routing và workflow legacy
+│   │   ├── train_eval.py              # Subsets train, diagnostics và ablation
 │   │   ├── paths.py                   # Đường dẫn chung cho cả hai bước
 │   │   └── asr/
 │   │       ├── predict.py             # Dùng ASR có sẵn; lưu bộ nhớ đệm và xuất file

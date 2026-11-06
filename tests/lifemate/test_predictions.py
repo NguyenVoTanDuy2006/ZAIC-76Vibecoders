@@ -288,7 +288,7 @@ class AgentHandoffTests(unittest.TestCase):
                     seen.append(deepcopy(messages)); return agent.ModelReply(replies.pop(0))
             with patch.dict(os.environ, {"ZAIC_PROJECT_ROOT": str(REPO)}), redirect_stdout(io.StringIO()):
                 report = agent.run_full_pipeline(root, output_dir=root / "agent-output", asr_predictions_path=speech_path,
-                                                toolenv_loader=env_loader, backend=Backend())
+                                                toolenv_loader=env_loader, backend=Backend(), agent_config=agent.AgentConfig(workflow_enabled=False))
             self.assertTrue(report["complete_split"])
             self.assertEqual([cid for cid, _ in created], ["a", "b"])
             self.assertEqual(len(created[0][1].calls), 1)
@@ -308,9 +308,28 @@ class AgentHandoffTests(unittest.TestCase):
                     agent.run_full_pipeline(root, asr_predictions_path=root / "missing.jsonl", toolenv_loader=toolenv)
             qwen.assert_not_called(); toolenv.assert_not_called()
 
-    def test_toolenv_is_still_an_explicit_leader_placeholder(self):
-        with self.assertRaises(NotImplementedError):
-            load_agent_module().load_toolenv("unused", "train")
+    def test_toolenv_loader_defers_creation_and_keeps_samples_independent(self):
+        agent = load_agent_module()
+        root = Path("dataset")
+        factory = Mock(side_effect=lambda *args, **kwargs: object())
+        with patch.object(agent, "get_tool_env_factory", return_value=factory) as load_factory:
+            make_env = agent.load_toolenv(root, "public_test")
+            load_factory.assert_called_once_with(root, "public_test")
+            factory.assert_not_called()
+            first, second = make_env("a"), make_env("b")
+        self.assertIsNot(first, second)
+        self.assertEqual(factory.call_args_list, [
+            unittest.mock.call("public_test", "a", root=root),
+            unittest.mock.call("public_test", "b", root=root),
+        ])
+
+    def test_toolenv_loader_rejects_a_different_split_package(self):
+        agent = load_agent_module()
+        with fixture() as (root, _, __, ___):
+            previous = SimpleNamespace(__file__=str(root / "train" / "zaic_tools" / "__init__.py"))
+            with patch.dict(sys.modules, {"zaic_tools": previous}):
+                with self.assertRaises(agent.AgentInputError):
+                    agent.load_toolenv(root, "public_test")
 
     @unittest.skipUnless(os.environ.get("LIFEMATE_DATA_ROOT"), "Set LIFEMATE_DATA_ROOT for optional official-runtime check")
     def test_prediction_file_to_official_toolenv_with_scripted_llm(self):
@@ -330,15 +349,15 @@ class AgentHandoffTests(unittest.TestCase):
             def generate(self, *args, **kwargs): return agent.ModelReply(replies.pop(0))
         created = []
         def env_loader(root, split):
-            factory = agent.get_tool_env_factory(root, split)
+            factory = agent.load_toolenv(root, split)
             def make_env(cid):
-                env = factory(split, cid, root=root); created.append(env); return env
+                env = factory(cid); created.append(env); return env
             return make_env
         with fixture() as (temp, _, __, ___):
             path = write_speech_file(temp / "real-metadata-demo-speech.jsonl", speech_rows)
             with patch.dict(os.environ, {"ZAIC_PROJECT_ROOT": str(REPO)}), redirect_stdout(io.StringIO()):
                 report = agent.run_full_pipeline(data_root, sample_ids=[row["id"]], asr_predictions_path=path,
-                    output_dir=temp / "official-wiring", toolenv_loader=env_loader, backend=Backend())
+                    output_dir=temp / "official-wiring", toolenv_loader=env_loader, backend=Backend(), agent_config=agent.AgentConfig(workflow_enabled=False))
             self.assertEqual(len(created), 1)
             self.assertEqual(len(created[0].get_tool_calls()), 1)
             self.assertEqual(report["records"][0]["tool_calls"], created[0].get_tool_calls())
